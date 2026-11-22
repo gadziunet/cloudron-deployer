@@ -1,4 +1,5 @@
 import express from 'express';
+import { buildAlerts } from './alerts.js';
 import { normalizeAddress, verifyGithubToken, verifyCloudron, parseExpires, UserError } from './integrations.js';
 
 // Wszystkie ścieżki są montowane pod /api (czyli za ochroną sesji).
@@ -53,6 +54,12 @@ export function settingsRouter({ db, vault, fetchFn }) {
   router.delete('/settings/github', (req, res) => {
     db.prepare("DELETE FROM settings WHERE key IN ('github_token', 'github_login', 'github_expires')").run();
     res.json({ configured: false });
+  });
+
+  // --- Ostrzeżenia o wygasających tokenach (strona główna)
+  router.get('/alerts', (req, res) => {
+    const servers = db.prepare('SELECT name, token_expires AS expires FROM servers').all();
+    res.json(buildAlerts({ githubExpires: readSetting('github_expires'), servers }));
   });
 
   // --- Serwery Cloudron

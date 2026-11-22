@@ -160,3 +160,11 @@ test('daty ważności: zapis, zmiana bez tokenu, walidacja', async () => {
   r = await call('POST', '/api/servers', { name: 'Zly', address: 'x.example.com', token: 'cl-ok', expires: '31.12.2026' });
   assert.equal(r.status, 400);
 });
+
+test('/api/alerts wymaga sesji i zwraca ostrzeżenie dla wygasłej daty', async () => {
+  assert.equal((await fetch(`${base}/api/alerts`)).status, 401);
+  await call('PATCH', '/api/settings/github', { expires: '2020-01-01' });
+  const alerts = await (await call('GET', '/api/alerts')).json();
+  const gh = alerts.find((a) => a.kind === 'github');
+  assert.ok(gh && gh.expired);
+});
