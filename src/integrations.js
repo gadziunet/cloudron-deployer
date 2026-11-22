@@ -40,20 +40,53 @@ export async function verifyGithubToken(fetchFn, token) {
   return { login: data.login };
 }
 
-export async function verifyCloudron(fetchFn, address, token) {
-  let res;
+// Zapytanie do API Cloudrona. Najpierw token w nagłówku, a gdy serwer odpowie 401,
+// ponownie tak jak robi to Cloudron CLI (access_token w adresie).
+export async function cloudronRequest(fetchFn, address, token, apiPath) {
+  const url = `https://${address}${apiPath}`;
+  const attempt = (u, headers) => fetchFn(u, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
   try {
-    res = await fetchFn(`https://${address}/api/v1/profile`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
+    let res = await attempt(url, { Authorization: `Bearer ${token}` });
+    if (res.status === 401) {
+      res = await attempt(`${url}${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`, {});
+    }
+    return res;
   } catch {
     throw new UserError(`Nie mozna polaczyc sie z serwerem ${address} (adres, siec, certyfikat?)`, 502);
   }
-  if (res.status === 401) throw new UserError('Cloudron odrzucil token API (zly lub wygasniety)');
+}
+
+async function serverMessage(res) {
+  try {
+    const body = await res.json();
+    const m = typeof body?.message === 'string' ? body.message : '';
+    return m.slice(0, 200);
+  } catch {
+    return '';
+  }
+}
+
+export async function verifyCloudron(fetchFn, address, token) {
+  // /apps to dokladnie to, czego potrzebujemy przy wdrazaniu
+  const res = await cloudronRequest(fetchFn, address, token, '/api/v1/apps');
+  if (res.status === 401 || res.status === 403) {
+    const msg = await serverMessage(res);
+    throw new UserError(
+      `Cloudron odrzucil token API (${res.status}${msg ? `: ${msg}` : ''}). Sprawdz, czy token jest z tego serwera i ma odczyt i zapis.`
+    );
+  }
   if (!res.ok) throw new UserError(`Cloudron zwrocil blad ${res.status}`, 502);
-  const data = await res.json();
-  return { username: data.username || data.email || 'nieznany' };
+
+  // nazwa wlasciciela tokenu jest tylko informacja dodatkowa
+  let username = 'token dziala';
+  try {
+    const p = await cloudronRequest(fetchFn, address, token, '/api/v1/profile');
+    if (p.ok) {
+      const data = await p.json();
+      username = data.username || data.email || username;
+    }
+  } catch { /* pomijamy */ }
+  return { username };
 }
 
 // Data ważności tokenu: pusta = brak daty, inaczej poprawne YYYY-MM-DD

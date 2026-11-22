@@ -8,7 +8,7 @@ import { normalizeAddress } from '../src/integrations.js';
 
 const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'wdrazacz' };
 const quiet = { info() {}, warn() {} };
-let server, base, dir, cookie, db, calls;
+let server, base, dir, cookie, db, calls, queryOnly = false;
 
 // Atrapa sieci: GitHub akceptuje "gh-ok", Cloudron akceptuje "cl-ok"
 const fakeFetch = async (url, opts = {}) => {
@@ -18,9 +18,12 @@ const fakeFetch = async (url, opts = {}) => {
   if (String(url).startsWith('https://api.github.com/user')) {
     return auth === 'Bearer gh-ok' ? json(200, { login: 'przyklad' }) : json(401, {});
   }
-  if (String(url).endsWith('/api/v1/profile')) {
+  if (/\/api\/v1\/(profile|apps)(\?|$)/.test(String(url))) {
     if (String(url).includes('offline.example.com')) throw new Error('ECONNREFUSED');
-    return auth === 'Bearer cl-ok' ? json(200, { username: 'admin-cloudron' }) : json(401, {});
+    const viaHeader = !queryOnly && auth === 'Bearer cl-ok';
+    const viaQuery = String(url).includes('access_token=cl-ok');
+    if (!viaHeader && !viaQuery) return json(401, { message: 'Invalid token' });
+    return String(url).includes('/profile') ? json(200, { username: 'admin-cloudron' }) : json(200, { apps: [] });
   }
   return json(404, {});
 };
@@ -167,4 +170,21 @@ test('/api/alerts wymaga sesji i zwraca ostrzeżenie dla wygasłej daty', async 
   const alerts = await (await call('GET', '/api/alerts')).json();
   const gh = alerts.find((a) => a.kind === 'github');
   assert.ok(gh && gh.expired);
+});
+
+test('serwer przyjmujący token tylko w adresie (jak CLI) też działa', async () => {
+  queryOnly = true;
+  try {
+    const r = await call('POST', '/api/servers', { name: 'Query', address: 'query.example.com', token: 'cl-ok' });
+    assert.equal(r.status, 201);
+    assert.equal((await r.json()).username, 'admin-cloudron');
+  } finally { queryOnly = false; }
+});
+
+test('odrzucony token: komunikat zawiera odpowiedź Cloudrona', async () => {
+  const r = await call('POST', '/api/servers', { name: 'Zly', address: 'zly.example.com', token: 'cl-zly' });
+  assert.equal(r.status, 400);
+  const { error } = await r.json();
+  assert.match(error, /401/);
+  assert.match(error, /Invalid token/);
 });

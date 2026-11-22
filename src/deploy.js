@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { UserError } from './integrations.js';
+import { UserError, cloudronRequest } from './integrations.js';
 import { checkRepoName } from './github.js';
 
 const TAG_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
@@ -59,16 +59,8 @@ export async function imageExists(fetchFn, { login, token }, owner, repo, tag) {
 
 // Znajduje aplikację o danej domenie (fqdn) na serwerze Cloudron
 export async function findCloudronApp(fetchFn, address, token, domain) {
-  let res;
-  try {
-    res = await fetchFn(`https://${address}/api/v1/apps`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(15_000),
-    });
-  } catch {
-    throw new UserError(`Nie mozna polaczyc sie z serwerem ${address}`);
-  }
-  if (res.status === 401) throw new UserError('Cloudron odrzucil token API (wygasl?). Zmien go w ustawieniach.');
+  const res = await cloudronRequest(fetchFn, address, token, '/api/v1/apps');
+  if (res.status === 401 || res.status === 403) throw new UserError('Cloudron odrzucil token API (wygasl?). Zmien go w ustawieniach.');
   if (!res.ok) throw new UserError(`Cloudron zwrocil blad ${res.status}`);
   const { apps = [] } = await res.json();
   const app = apps.find((a) => String(a.fqdn).toLowerCase() === domain.toLowerCase());
