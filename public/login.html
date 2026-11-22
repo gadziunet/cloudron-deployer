@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wdrazacz - logowanie</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <main>
+    <form id="form" class="card">
+      <h1>Wdrażacz</h1>
+      <label for="username">Login</label>
+      <input id="username" name="username" autocomplete="username" required>
+      <label for="password">Hasło</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit">Zaloguj</button>
+      <div id="error" class="error"></div>
+    </form>
+  </main>
+  <script src="/login.js"></script>
+</body>
+</html>

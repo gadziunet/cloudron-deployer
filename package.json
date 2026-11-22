@@ -1,0 +1,16 @@
+{
+  "name": "cloudron-deployer",
+  "version": "0.1.0",
+  "description": "Lokalna aplikacja do wdrazania obrazow z GitHub/ghcr.io na serwery Cloudron",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
