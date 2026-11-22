@@ -3,7 +3,7 @@ import { buildAlerts } from './alerts.js';
 import { normalizeAddress, verifyGithubToken, verifyCloudron, parseExpires, UserError } from './integrations.js';
 
 // Wszystkie ścieżki są montowane pod /api (czyli za ochroną sesji).
-export function settingsRouter({ db, vault, fetchFn }) {
+export function settingsRouter({ db, vault, fetchFn, onGithubChange = () => {} }) {
   const router = express.Router();
 
   const wrap = (fn) => async (req, res) => {
@@ -39,6 +39,7 @@ export function settingsRouter({ db, vault, fetchFn }) {
     upsertSetting('github_login', login);
     if (expires) upsertSetting('github_expires', expires);
     else db.prepare("DELETE FROM settings WHERE key = 'github_expires'").run();
+    onGithubChange();
     res.json({ configured: true, login, expires });
   }));
 
@@ -53,6 +54,7 @@ export function settingsRouter({ db, vault, fetchFn }) {
 
   router.delete('/settings/github', (req, res) => {
     db.prepare("DELETE FROM settings WHERE key IN ('github_token', 'github_login', 'github_expires')").run();
+    onGithubChange();
     res.json({ configured: false });
   });
 

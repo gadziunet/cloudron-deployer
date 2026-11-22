@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wdrazacz - repozytorium</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <strong>Wdrażacz</strong>
+    <nav><a href="/">Repozytoria</a> <a href="/settings.html">Ustawienia</a></nav>
+    <button id="logout" class="secondary flat">Wyloguj</button>
+  </header>
+  <main>
+    <div id="alerts"></div>
+    <div class="card">
+      <h1 id="title">Repozytorium</h1>
+      <div id="error" class="error"></div>
+
+      <label for="tag">Tag</label>
+      <select id="tag"></select>
+      <p id="tag-hint" class="hint"></p>
+
+      <label for="env">Gdzie wdrożyć</label>
+      <select id="env">
+        <option value="testowa">Testowa</option>
+        <option value="produkcja">Produkcja</option>
+      </select>
+      <p id="server-hint" class="hint"></p>
+
+      <label for="domain">Domena aplikacji (np. app.example.com)</label>
+      <input id="domain" autocomplete="off" placeholder="app.example.com">
+      <p id="domain-hint" class="hint"></p>
+
+      <button id="deploy" disabled>Wdróż (etap 4)</button>
+    </div>
+  </main>
+  <script type="module" src="/repo.js"></script>
+</body>
+</html>

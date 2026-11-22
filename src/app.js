@@ -5,6 +5,8 @@ import { openDb } from './db.js';
 import { makeVault } from './crypto.js';
 import { ensureAdmin, makeAuth } from './auth.js';
 import { settingsRouter } from './settings.js';
+import { makeGithub } from './github.js';
+import { reposRouter } from './repos.js';
 
 const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -34,7 +36,15 @@ export function createApp(config, log = console, { fetchFn = fetch } = {}) {
   app.get('/api/me', (req, res) => res.json({ username: req.user.username }));
   app.post('/api/logout', auth.logout);
   app.post('/api/password', auth.changePassword);
-  app.use('/api', settingsRouter({ db, vault, fetchFn }));
+  const github = makeGithub({
+    fetchFn,
+    getToken: () => {
+      const row = db.prepare("SELECT value_enc FROM settings WHERE key = 'github_token'").get();
+      return row ? vault.decrypt(row.value_enc) : null;
+    },
+  });
+  app.use('/api', settingsRouter({ db, vault, fetchFn, onGithubChange: () => github.clearCache() }));
+  app.use('/api', reposRouter({ db, github }));
 
   // Strony statyczne: login.html jest publiczny, reszta ładuje dane przez /api
   app.use(express.static(publicDir, { index: false }));

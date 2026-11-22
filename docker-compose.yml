@@ -1,0 +1,24 @@
+services:
+  cloudron-deployer:
+    build: .
+    container_name: cloudron-deployer
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Wartości bierze z pliku .env (skopiuj .env.example do .env)
+      APP_SECRET: ${APP_SECRET:?Ustaw APP_SECRET w pliku .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      PORT: "3000"
+      # Ustaw "true" tylko gdy aplikacja stoi za HTTPS (reverse proxy)
+      SECURE_COOKIE: ${SECURE_COOKIE:-false}
+    volumes:
+      - cloudron-deployer-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  cloudron-deployer-data:
