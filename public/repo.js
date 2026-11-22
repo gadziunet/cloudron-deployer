@@ -1,4 +1,4 @@
-import { api, el, bindLogout } from './common.js';
+import { api, el, bindLogout, STATUS, followDeployment } from './common.js';
 
 bindLogout();
 const $ = (id) => document.getElementById(id);
@@ -65,6 +65,33 @@ async function init() {
   } catch (e) { $('error').textContent = e.message; }
 }
 
+async function deploy() {
+  $('error').textContent = '';
+  const tag = $('tag').value;
+  const env = $('env').value;
+  if (!tag) { $('error').textContent = 'Brak tagu do wdrożenia.'; return; }
+  if (!$('domain').value.trim()) { $('error').textContent = 'Wpisz domenę aplikacji.'; return; }
+  if (env === 'produkcja' && !confirm(`Wdrożyć ${name}:${tag} na PRODUKCJĘ?`)) return;
+  $('deploy').disabled = true;
+  try {
+    if ($('domain').value.trim() !== targets[env]) await saveDomain();
+    const { id } = await api('/api/deployments', { method: 'POST', body: JSON.stringify({ repo: name, tag, environment: env }) });
+    $('run').hidden = false;
+    await followDeployment(id, (d) => {
+      const st = STATUS[d.status] || { text: d.status, cls: '' };
+      $('status').textContent = st.text;
+      $('status').className = `badge ${st.cls}`;
+      $('log').textContent = d.log;
+      $('log').scrollTop = $('log').scrollHeight;
+    });
+  } catch (e) {
+    $('error').textContent = e.message;
+  } finally {
+    $('deploy').disabled = false;
+  }
+}
+
+$('deploy').addEventListener('click', deploy);
 $('env').addEventListener('change', showEnvHint);
 $('domain').addEventListener('change', saveDomain);
 init();

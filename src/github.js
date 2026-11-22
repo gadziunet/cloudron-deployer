@@ -4,7 +4,7 @@ const TTL_MS = 30_000;
 const NAME = /^[A-Za-z0-9._-]{1,100}$/;
 
 export function checkRepoName(owner, repo) {
-  if (!NAME.test(owner) || !NAME.test(repo) || owner === '.' || repo === '.' || owner === '..' || repo === '..') {
+  if (!NAME.test(owner) || !NAME.test(repo) || ['.', '..'].includes(owner) || ['.', '..'].includes(repo)) {
     throw new UserError('Niepoprawna nazwa repozytorium');
   }
 }
@@ -13,18 +13,20 @@ export function checkRepoName(owner, repo) {
 export function makeGithub({ fetchFn, getToken }) {
   const cache = new Map();
 
-  async function get(path) {
+  async function get(path, { raw = false } = {}) {
     const token = getToken();
     if (!token) throw new UserError('Najpierw dodaj token GitHub w ustawieniach', 409);
-    const hit = cache.get(path);
-    if (hit && Date.now() - hit.at < TTL_MS) return hit.data;
+    if (!raw) {
+      const hit = cache.get(path);
+      if (hit && Date.now() - hit.at < TTL_MS) return hit.data;
+    }
 
     let res;
     try {
       res = await fetchFn(`https://api.github.com${path}`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
+          Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json',
           'User-Agent': 'cloudron-deployer',
         },
         signal: AbortSignal.timeout(15_000),
@@ -33,9 +35,10 @@ export function makeGithub({ fetchFn, getToken }) {
       throw new UserError('Nie mozna polaczyc sie z GitHub', 502);
     }
     if (res.status === 401) throw new UserError('GitHub odrzucil token (wygasl?). Zmien go w ustawieniach.', 409);
-    if (res.status === 404) throw new UserError('Nie znaleziono w GitHub (repozytorium lub brak uprawnien tokenu)', 404);
+    if (res.status === 404) throw new UserError('Nie znaleziono w GitHub (repozytorium, plik lub brak uprawnien tokenu)', 404);
     if (res.status === 403 || res.status === 429) throw new UserError('GitHub ogranicza zapytania lub brak uprawnien. Sprobuj za chwile.', 502);
     if (!res.ok) throw new UserError(`GitHub zwrocil blad ${res.status}`, 502);
+    if (raw) return res.text();
     const data = await res.json();
     cache.set(path, { at: Date.now(), data });
     return data;
@@ -63,6 +66,13 @@ export function makeGithub({ fetchFn, getToken }) {
       checkRepoName(owner, repo);
       const data = await get(`/repos/${owner}/${repo}/tags?per_page=100`);
       return data.map((t) => t.name);
+    },
+
+    // Zawartość pliku z repozytorium dla danego tagu (tekst)
+    async getFileAtTag(owner, repo, filePath, tag) {
+      checkRepoName(owner, repo);
+      const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+      return get(`/repos/${owner}/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(tag)}`, { raw: true });
     },
   };
 }

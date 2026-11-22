@@ -1,4 +1,6 @@
 FROM node:22-slim
+# Cloudron CLI: to nim wdrazamy aplikacje na serwery Cloudron
+RUN npm install -g cloudron@9 && npm cache clean --force
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev

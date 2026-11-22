@@ -1,7 +1,7 @@
 # cloudron-deployer
 
 Lokalna aplikacja (tylko LAN) do wdrażania obrazów z ghcr.io na serwery Cloudron.
-Stan: etap 3 (logowanie, ustawienia, lista repozytoriów, tagi, zapamiętywana domena; wdrożenie w etapie 4).
+Stan: etap 4 (logowanie, ustawienia, repozytoria i tagi, wdrożenie przez Cloudron CLI z logiem na żywo, historia).
 
 ## Uruchomienie lokalnie
 

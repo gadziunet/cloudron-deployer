@@ -9,7 +9,7 @@
 <body>
   <header>
     <strong>Wdrażacz</strong>
-    <nav><a href="/">Repozytoria</a> <a href="/settings.html">Ustawienia</a></nav>
+    <nav><a href="/">Repozytoria</a> <a href="/history.html">Historia</a> <a href="/settings.html">Ustawienia</a></nav>
     <button id="logout" class="secondary flat">Wyloguj</button>
   </header>
   <main>
@@ -33,7 +33,13 @@
       <input id="domain" autocomplete="off" placeholder="app.example.com">
       <p id="domain-hint" class="hint"></p>
 
-      <button id="deploy" disabled>Wdróż (etap 4)</button>
+      <button id="deploy">Wdróż</button>
+    </div>
+
+    <div class="card" id="run" hidden>
+      <h1>Przebieg wdrożenia <span id="status" class="badge"></span></h1>
+      <pre id="log" class="log"></pre>
+      <a href="/history.html">Historia wdrożeń</a>
     </div>
   </main>
   <script type="module" src="/repo.js"></script>

@@ -41,3 +41,20 @@ export function dateInput(value, onchange) {
   input.addEventListener('change', () => onchange(input.value));
   return input;
 }
+
+export const STATUS = {
+  running: { text: 'w toku', cls: 'warn-text' },
+  success: { text: 'udane', cls: 'ok-text' },
+  failed: { text: 'błąd', cls: 'err-text' },
+  interrupted: { text: 'przerwane', cls: 'err-text' },
+};
+
+// Odpytuje wdrożenie co 1,5 s, aż się skończy; wywołuje onUpdate przy każdej odpowiedzi
+export async function followDeployment(id, onUpdate) {
+  for (;;) {
+    const d = await api(`/api/deployments/${id}`);
+    onUpdate(d);
+    if (d.status !== 'running') return d;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
