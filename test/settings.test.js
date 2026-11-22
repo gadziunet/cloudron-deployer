@@ -63,7 +63,7 @@ test('GitHub: zły token odrzucony, dobry zapisany szyfrowany', async () => {
   const stored = db.prepare("SELECT value_enc FROM settings WHERE key = 'github_token'").get().value_enc;
   assert.ok(!stored.includes('gh-ok'));
   const status = await (await call('GET', '/api/settings/github')).json();
-  assert.deepEqual(status, { configured: true, login: 'przyklad', expires: null });
+  assert.deepEqual(status, { configured: true, login: 'przyklad', username: null, expires: null });
   assert.ok(!JSON.stringify(status).includes('gh-ok'));
 });
 

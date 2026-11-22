@@ -9,6 +9,7 @@ import { makeGithub } from './github.js';
 import { reposRouter } from './repos.js';
 import { makeDeployer, defaultRunCli } from './deploy.js';
 import { deploymentsRouter } from './deployments.js';
+import { makeRegistrySync } from './registry.js';
 
 const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -47,7 +48,8 @@ export function createApp(config, log = console, { fetchFn = fetch, runCli = def
     db, vault, github, fetchFn, runCli,
     getGithub: () => ({ token: readSecret('github_token'), login: readSecret('github_login') }),
   });
-  app.use('/api', settingsRouter({ db, vault, fetchFn, onGithubChange: () => github.clearCache() }));
+  const registry = makeRegistrySync({ db, vault, fetchFn });
+  app.use('/api', settingsRouter({ db, vault, fetchFn, registry, onGithubChange: () => github.clearCache() }));
   app.use('/api', reposRouter({ db, github }));
   app.use('/api', deploymentsRouter({ db, deployer }));
 

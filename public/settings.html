@@ -19,6 +19,9 @@
       <form id="github-form">
         <label for="github-token">Token GitHub</label>
         <input id="github-token" type="password" autocomplete="off" required>
+        <label for="github-username">Nazwa użytkownika GitHub dla ghcr.io (opcjonalnie)</label>
+        <input id="github-username" autocomplete="off" placeholder="domyślnie konto tokenu">
+        <p class="hint">Token z uprawnieniem read:packages trafia automatycznie do rejestru ghcr.io na wszystkich serwerach Cloudron.</p>
         <label for="github-expires">Ważny do (opcjonalnie)</label>
         <input id="github-expires" type="date">
         <p class="hint">Uprawnienia: odczyt repozytoriów (Contents, Metadata) i pakietów (read:packages).</p>
@@ -30,6 +33,8 @@
     <section class="card">
       <h1>Serwery Cloudron</h1>
       <div id="servers">Ładowanie...</div>
+      <button id="sync-registry" class="secondary">Zsynchronizuj ghcr.io na serwerach</button>
+      <div id="sync-msg" class="hint"></div>
       <form id="server-form">
         <label for="server-name">Nazwa (np. Test, Produkcja)</label>
         <input id="server-name" required maxlength="60">

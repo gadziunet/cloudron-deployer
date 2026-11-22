@@ -42,9 +42,15 @@ export async function verifyGithubToken(fetchFn, token) {
 
 // Zapytanie do API Cloudrona. Najpierw token w nagłówku, a gdy serwer odpowie 401,
 // ponownie tak jak robi to Cloudron CLI (access_token w adresie).
-export async function cloudronRequest(fetchFn, address, token, apiPath) {
+export async function cloudronRequest(fetchFn, address, token, apiPath, { method = 'GET', body } = {}) {
   const url = `https://${address}${apiPath}`;
-  const attempt = (u, headers) => fetchFn(u, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const payload = body === undefined ? undefined : JSON.stringify(body);
+  const attempt = (u, headers) => fetchFn(u, {
+    method,
+    headers: payload === undefined ? headers : { ...headers, 'Content-Type': 'application/json' },
+    body: payload,
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
   try {
     let res = await attempt(url, { Authorization: `Bearer ${token}` });
     if (res.status === 401) {
@@ -56,7 +62,7 @@ export async function cloudronRequest(fetchFn, address, token, apiPath) {
   }
 }
 
-async function serverMessage(res) {
+export async function serverMessage(res) {
   try {
     const body = await res.json();
     const m = typeof body?.message === 'string' ? body.message : '';
