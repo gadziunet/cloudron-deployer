@@ -37,11 +37,12 @@ export async function syncGhcr(fetchFn, { address, token }, { username, password
     ? `/api/v1/docker/registries/${encodeURIComponent(existing.id)}`
     : '/api/v1/docker/registries';
 
-  // nazwa pola z adresem rejestru nie jest opisana w dokumentacji: najpierw serverAddress, w razie 400 server
+  // Cloudron wymaga pola provider ("other" = dowolny rejestr, np. ghcr.io). Nazwa pola z adresem
+  // nie jest opisana w dokumentacji: najpierw serverAddress, w razie 400 server.
   let lastError = '';
   for (const key of ['serverAddress', 'server']) {
     const res = await cloudronRequest(fetchFn, address, token, path, {
-      method: 'POST', body: { [key]: GHCR, username, password },
+      method: 'POST', body: { provider: 'other', [key]: GHCR, username, password },
     });
     if (res.status === 200 || res.status === 201 || res.status === 204) {
       return { action: existing ? 'updated' : 'added' };

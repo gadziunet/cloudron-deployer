@@ -81,7 +81,7 @@ test('zapis tokenu GitHub dodaje ghcr.io na wszystkich serwerach, domyślnie z l
   assert.ok(!JSON.stringify(data).includes('gh-token-123'));
   const ps = posts();
   assert.equal(ps.length, 2);
-  assert.deepEqual(ps[0].body, { serverAddress: 'ghcr.io', username: 'konto-tokenu', password: 'gh-token-123' });
+  assert.deepEqual(ps[0].body, { provider: 'other', serverAddress: 'ghcr.io', username: 'konto-tokenu', password: 'gh-token-123' });
   assert.equal(ps[0].apiPath, '/api/v1/docker/registries');
 });
 
@@ -123,7 +123,8 @@ test('pole z adresem: gdy serverAddress daje 400, próbujemy server', async () =
   const r = await call('POST', '/api/registry/sync', { server_id: (await (await call('GET', '/api/servers')).json()).find((s) => s.name === 'A').id });
   const [a] = (await r.json()).registry;
   assert.equal(a.ok, true);
-  assert.deepEqual(posts().map((p) => Object.keys(p.body)[0]), ['serverAddress', 'server']);
+  assert.deepEqual(posts().map((p) => Object.keys(p.body)[1]), ['serverAddress', 'server']);
+  assert.ok(posts().every((p) => p.body.provider === 'other'));
 });
 
 test('błąd jednego serwera nie blokuje drugiego i pokazuje odpowiedź Cloudrona', async () => {
