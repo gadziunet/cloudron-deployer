@@ -1,6 +1,8 @@
 services:
   cloudron-deployer:
-    build: .
+    # Obraz buduje GitHub Actions (.github/workflows/docker.yml): tag edge = ostatni commit z main
+    image: ghcr.io/gadziunet/cloudron-deployer:edge
+    pull_policy: always
     container_name: cloudron-deployer
     restart: unless-stopped
     ports:

@@ -12,9 +12,16 @@ Adres: http://localhost:3000, login `admin`.
 ## Docker Compose (zalecane)
 
     cp .env.example .env      # uzupelnij APP_SECRET i ADMIN_PASSWORD
-    docker compose up -d --build
+    docker compose up -d
+
+Obraz (`ghcr.io/gadziunet/cloudron-deployer`) buduje GitHub Actions: tag `edge` to ostatni commit z `main`,
+tagi `vX.Y.Z` daja wersje `X.Y.Z`, `X.Y` i `latest`. Jesli pobieranie obrazu zwroci "denied", ustaw pakiet
+jako publiczny (GitHub: Packages -> cloudron-deployer -> Package settings) albo zaloguj sie `docker login ghcr.io`.
 
 Adres: http://adres-maszyny:3000. Dane (baza) sa w wolumenie `cloudron-deployer-data`.
+Kontener dziala jako uzytkownik `node` (uid 1000), wiec katalog z danymi musi nalezec do uid 1000.
+
+Budowanie lokalnie zamiast pobierania: `docker build -t cloudron-deployer .` i w compose zamien `image:` na `cloudron-deployer`.
 
 ## Docker (bez Compose)
 
