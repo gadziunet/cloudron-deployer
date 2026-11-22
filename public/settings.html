@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wdrazacz - ustawienia</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <strong>Wdrażacz</strong>
+    <nav><a href="/">Repozytoria</a> <a href="/settings.html">Ustawienia</a></nav>
+    <button id="logout" class="secondary flat">Wyloguj</button>
+  </header>
+  <main>
+    <section class="card">
+      <h1>GitHub</h1>
+      <div id="github-status">Ładowanie...</div>
+      <form id="github-form">
+        <label for="github-token">Token GitHub</label>
+        <input id="github-token" type="password" autocomplete="off" required>
+        <p class="hint">Uprawnienia: odczyt repozytoriów (Contents, Metadata) i pakietów (read:packages).</p>
+        <button type="submit">Zapisz token</button>
+        <div id="github-msg" class="error"></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h1>Serwery Cloudron</h1>
+      <div id="servers">Ładowanie...</div>
+      <form id="server-form">
+        <label for="server-name">Nazwa (np. Test, Produkcja)</label>
+        <input id="server-name" required maxlength="60">
+        <label for="server-address">Adres panelu (np. my.example.com)</label>
+        <input id="server-address" required>
+        <label for="server-token">Token API Cloudrona</label>
+        <input id="server-token" type="password" autocomplete="off" required>
+        <p class="hint">Token wygenerujesz w Cloudronie: profil użytkownika → tokeny API (odczyt i zapis).</p>
+        <button type="submit">Dodaj serwer</button>
+        <div id="server-msg" class="error"></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h1>Środowiska</h1>
+      <div id="environments">Ładowanie...</div>
+    </section>
+
+    <section class="card">
+      <h1>Zmiana hasła</h1>
+      <form id="password-form">
+        <label for="pw-current">Obecne hasło</label>
+        <input id="pw-current" type="password" autocomplete="current-password" required>
+        <label for="pw-new">Nowe hasło (min. 10 znaków)</label>
+        <input id="pw-new" type="password" autocomplete="new-password" required minlength="10">
+        <button type="submit">Zmień hasło</button>
+        <div id="pw-msg" class="error"></div>
+      </form>
+    </section>
+  </main>
+  <script type="module" src="/settings.js"></script>
+</body>
+</html>

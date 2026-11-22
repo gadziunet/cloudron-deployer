@@ -1,16 +1,7 @@
-const headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'wdrazacz' };
+import { api, bindLogout } from './common.js';
 
-async function api(path, options = {}) {
-  const res = await fetch(path, { headers, ...options });
-  if (res.status === 401) { location.href = '/'; throw new Error('401'); }
-  return res.json();
-}
-
-document.getElementById('logout').addEventListener('click', async () => {
-  await api('/api/logout', { method: 'POST' });
-  location.href = '/';
-});
-
+bindLogout();
 api('/api/me').then((me) => {
-  document.getElementById('info').textContent = `Zalogowano jako ${me.username}. Lista repozytoriów pojawi się w etapie 3.`;
+  document.getElementById('info').textContent =
+    `Zalogowano jako ${me.username}. Lista repozytoriów pojawi się w etapie 3.`;
 });

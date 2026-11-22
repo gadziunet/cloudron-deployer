@@ -4,10 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { openDb } from './db.js';
 import { makeVault } from './crypto.js';
 import { ensureAdmin, makeAuth } from './auth.js';
+import { settingsRouter } from './settings.js';
 
 const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
-export function createApp(config, log = console) {
+export function createApp(config, log = console, { fetchFn = fetch } = {}) {
   const db = openDb(config.dataDir);
   const vault = makeVault(config.appSecret);
   ensureAdmin(db, config.adminPassword, log);
@@ -33,6 +34,7 @@ export function createApp(config, log = console) {
   app.get('/api/me', (req, res) => res.json({ username: req.user.username }));
   app.post('/api/logout', auth.logout);
   app.post('/api/password', auth.changePassword);
+  app.use('/api', settingsRouter({ db, vault, fetchFn }));
 
   // Strony statyczne: login.html jest publiczny, reszta ładuje dane przez /api
   app.use(express.static(publicDir, { index: false }));
