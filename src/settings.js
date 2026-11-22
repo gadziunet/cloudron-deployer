@@ -1,5 +1,5 @@
 import express from 'express';
-import { normalizeAddress, verifyGithubToken, verifyCloudron, UserError } from './integrations.js';
+import { normalizeAddress, verifyGithubToken, verifyCloudron, parseExpires, UserError } from './integrations.js';
 
 // Wszystkie ścieżki są montowane pod /api (czyli za ochroną sesji).
 export function settingsRouter({ db, vault, fetchFn }) {
@@ -15,33 +15,49 @@ export function settingsRouter({ db, vault, fetchFn }) {
     }
   };
 
-  const publicServer = (s) => ({ id: s.id, name: s.name, address: s.address });
+  const upsertSetting = (key, value) => db.prepare(
+    'INSERT INTO settings(key, value_enc) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value_enc = excluded.value_enc'
+  ).run(key, vault.encrypt(value));
+  const readSetting = (key) => {
+    const row = db.prepare('SELECT value_enc FROM settings WHERE key = ?').get(key);
+    return row ? vault.decrypt(row.value_enc) : null;
+  };
 
   // --- GitHub
   router.get('/settings/github', (req, res) => {
-    const row = db.prepare("SELECT value_enc FROM settings WHERE key = 'github_token'").get();
-    const login = db.prepare("SELECT value_enc FROM settings WHERE key = 'github_login'").get();
-    res.json({ configured: !!row, login: login ? vault.decrypt(login.value_enc) : null });
+    const configured = !!db.prepare("SELECT 1 FROM settings WHERE key = 'github_token'").get();
+    res.json({ configured, login: readSetting('github_login'), expires: readSetting('github_expires') || null });
   });
 
   router.put('/settings/github', wrap(async (req, res) => {
     const token = String(req.body?.token || '').trim();
     if (!token) throw new UserError('Podaj token GitHub');
+    const expires = parseExpires(req.body?.expires);
     const { login } = await verifyGithubToken(fetchFn, token);
-    const upsert = db.prepare('INSERT INTO settings(key, value_enc) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value_enc = excluded.value_enc');
-    upsert.run('github_token', vault.encrypt(token));
-    upsert.run('github_login', vault.encrypt(login));
-    res.json({ configured: true, login });
+    upsertSetting('github_token', token);
+    upsertSetting('github_login', login);
+    if (expires) upsertSetting('github_expires', expires);
+    else db.prepare("DELETE FROM settings WHERE key = 'github_expires'").run();
+    res.json({ configured: true, login, expires });
+  }));
+
+  // zmiana samej daty ważności (bez ponownego wpisywania tokenu)
+  router.patch('/settings/github', wrap(async (req, res) => {
+    if (!db.prepare("SELECT 1 FROM settings WHERE key = 'github_token'").get()) throw new UserError('Brak tokenu GitHub', 404);
+    const expires = parseExpires(req.body?.expires);
+    if (expires) upsertSetting('github_expires', expires);
+    else db.prepare("DELETE FROM settings WHERE key = 'github_expires'").run();
+    res.json({ expires });
   }));
 
   router.delete('/settings/github', (req, res) => {
-    db.prepare("DELETE FROM settings WHERE key IN ('github_token', 'github_login')").run();
+    db.prepare("DELETE FROM settings WHERE key IN ('github_token', 'github_login', 'github_expires')").run();
     res.json({ configured: false });
   });
 
   // --- Serwery Cloudron
   router.get('/servers', (req, res) => {
-    res.json(db.prepare('SELECT id, name, address FROM servers ORDER BY name').all());
+    res.json(db.prepare('SELECT id, name, address, token_expires AS expires FROM servers ORDER BY name').all());
   });
 
   router.post('/servers', wrap(async (req, res) => {
@@ -50,11 +66,12 @@ export function settingsRouter({ db, vault, fetchFn }) {
     if (!name || name.length > 60) throw new UserError('Podaj nazwe serwera (do 60 znakow)');
     if (!token) throw new UserError('Podaj token API Cloudrona');
     const address = normalizeAddress(req.body?.address);
+    const expires = parseExpires(req.body?.expires);
     const { username } = await verifyCloudron(fetchFn, address, token);
     try {
-      const info = db.prepare('INSERT INTO servers(name, address, token_enc) VALUES (?, ?, ?)')
-        .run(name, address, vault.encrypt(token));
-      res.status(201).json({ id: Number(info.lastInsertRowid), name, address, username });
+      const info = db.prepare('INSERT INTO servers(name, address, token_enc, token_expires) VALUES (?, ?, ?, ?)')
+        .run(name, address, vault.encrypt(token), expires);
+      res.status(201).json({ id: Number(info.lastInsertRowid), name, address, expires, username });
     } catch (e) {
       if (String(e.message).includes('UNIQUE')) throw new UserError('Serwer o takiej nazwie juz istnieje');
       throw e;
@@ -66,6 +83,13 @@ export function settingsRouter({ db, vault, fetchFn }) {
     if (!s) throw new UserError('Nie ma takiego serwera', 404);
     const { username } = await verifyCloudron(fetchFn, s.address, vault.decrypt(s.token_enc));
     res.json({ ok: true, username });
+  }));
+
+  router.patch('/servers/:id', wrap(async (req, res) => {
+    const expires = parseExpires(req.body?.expires);
+    const info = db.prepare('UPDATE servers SET token_expires = ? WHERE id = ?').run(expires, Number(req.params.id));
+    if (!info.changes) throw new UserError('Nie ma takiego serwera', 404);
+    res.json({ expires });
   }));
 
   router.delete('/servers/:id', (req, res) => {

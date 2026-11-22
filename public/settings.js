@@ -1,4 +1,4 @@
-import { api, el, bindLogout } from './common.js';
+import { api, el, bindLogout, expiryInfo, dateInput } from './common.js';
 
 bindLogout();
 const $ = (id) => document.getElementById(id);
@@ -14,8 +14,14 @@ async function loadGithub() {
   const box = $('github-status');
   box.textContent = '';
   if (s.configured) {
+    const info = expiryInfo(s.expires);
+    const label = el('small', { class: info.cls, textContent: info.text });
     box.append(el('div', { class: 'row' },
-      el('span', {}, `Połączono jako ${s.login}`),
+      el('span', {}, `Połączono jako ${s.login}`, label,
+        dateInput(s.expires, async (value) => {
+          await api('/api/settings/github', { method: 'PATCH', body: JSON.stringify({ expires: value }) });
+          loadGithub();
+        })),
       el('button', {
         class: 'danger flat', textContent: 'Usuń',
         onclick: async () => { await api('/api/settings/github', { method: 'DELETE' }); loadGithub(); },
@@ -28,8 +34,9 @@ async function loadGithub() {
 $('github-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
-    const r = await api('/api/settings/github', { method: 'PUT', body: JSON.stringify({ token: $('github-token').value }) });
+    const r = await api('/api/settings/github', { method: 'PUT', body: JSON.stringify({ token: $('github-token').value, expires: $('github-expires').value }) });
     $('github-token').value = '';
+    $('github-expires').value = '';
     say($('github-msg'), `Zapisano. Konto: ${r.login}`, true);
     loadGithub();
   } catch (err) { say($('github-msg'), err.message); }
@@ -43,8 +50,14 @@ async function loadServers() {
   if (!servers.length) box.textContent = 'Brak serwerów.';
   for (const s of servers) {
     const status = el('small', {}, s.address);
+    const info = expiryInfo(s.expires);
+    const expiry = el('small', { class: info.cls, textContent: `token: ${info.text}` });
     box.append(el('div', { class: 'row' },
-      el('span', {}, s.name, status),
+      el('span', {}, s.name, status, expiry,
+        dateInput(s.expires, async (value) => {
+          await api(`/api/servers/${s.id}`, { method: 'PATCH', body: JSON.stringify({ expires: value }) });
+          loadAll();
+        })),
       el('span', {},
         el('button', {
           class: 'secondary flat', textContent: 'Sprawdź',
@@ -95,7 +108,7 @@ $('server-form').addEventListener('submit', async (e) => {
   try {
     const r = await api('/api/servers', {
       method: 'POST',
-      body: JSON.stringify({ name: $('server-name').value, address: $('server-address').value, token: $('server-token').value }),
+      body: JSON.stringify({ name: $('server-name').value, address: $('server-address').value, token: $('server-token').value, expires: $('server-expires').value }),
     });
     e.target.reset();
     say($('server-msg'), `Dodano. Token należy do: ${r.username}`, true);

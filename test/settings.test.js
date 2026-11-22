@@ -60,7 +60,7 @@ test('GitHub: zły token odrzucony, dobry zapisany szyfrowany', async () => {
   const stored = db.prepare("SELECT value_enc FROM settings WHERE key = 'github_token'").get().value_enc;
   assert.ok(!stored.includes('gh-ok'));
   const status = await (await call('GET', '/api/settings/github')).json();
-  assert.deepEqual(status, { configured: true, login: 'przyklad' });
+  assert.deepEqual(status, { configured: true, login: 'przyklad', expires: null });
   assert.ok(!JSON.stringify(status).includes('gh-ok'));
 });
 
@@ -130,4 +130,33 @@ test('endpointy ustawień bez sesji zwracają 401', async () => {
     const r = await fetch(base + p, { method: m, headers: H });
     assert.equal(r.status, 401, `${m} ${p}`);
   }
+});
+
+test('daty ważności: zapis, zmiana bez tokenu, walidacja', async () => {
+  let r = await call('PUT', '/api/settings/github', { token: 'gh-ok', expires: '2026-12-31' });
+  assert.equal((await r.json()).expires, '2026-12-31');
+  assert.equal((await (await call('GET', '/api/settings/github')).json()).expires, '2026-12-31');
+
+  r = await call('PATCH', '/api/settings/github', { expires: '2027-01-15' });
+  assert.equal((await r.json()).expires, '2027-01-15');
+  r = await call('PATCH', '/api/settings/github', { expires: '2027-02-30' });
+  assert.equal(r.status, 400);
+  r = await call('PATCH', '/api/settings/github', { expires: 'jutro' });
+  assert.equal(r.status, 400);
+  r = await call('PATCH', '/api/settings/github', { expires: '' });
+  assert.equal((await r.json()).expires, null);
+
+  r = await call('POST', '/api/servers', { name: 'Prod', address: 'prod.example.com', token: 'cl-ok', expires: '2026-12-01' });
+  assert.equal(r.status, 201);
+  const { id } = await r.json();
+  let list = await (await call('GET', '/api/servers')).json();
+  assert.equal(list.find((s) => s.id === id).expires, '2026-12-01');
+  r = await call('PATCH', `/api/servers/${id}`, { expires: '2027-03-01' });
+  assert.equal(r.status, 200);
+  list = await (await call('GET', '/api/servers')).json();
+  assert.equal(list.find((s) => s.id === id).expires, '2027-03-01');
+  r = await call('PATCH', '/api/servers/9999', { expires: '2027-03-01' });
+  assert.equal(r.status, 404);
+  r = await call('POST', '/api/servers', { name: 'Zly', address: 'x.example.com', token: 'cl-ok', expires: '31.12.2026' });
+  assert.equal(r.status, 400);
 });

@@ -19,6 +19,8 @@
       <form id="github-form">
         <label for="github-token">Token GitHub</label>
         <input id="github-token" type="password" autocomplete="off" required>
+        <label for="github-expires">Ważny do (opcjonalnie)</label>
+        <input id="github-expires" type="date">
         <p class="hint">Uprawnienia: odczyt repozytoriów (Contents, Metadata) i pakietów (read:packages).</p>
         <button type="submit">Zapisz token</button>
         <div id="github-msg" class="error"></div>
@@ -35,6 +37,8 @@
         <input id="server-address" required>
         <label for="server-token">Token API Cloudrona</label>
         <input id="server-token" type="password" autocomplete="off" required>
+        <label for="server-expires">Token ważny do (opcjonalnie)</label>
+        <input id="server-expires" type="date">
         <p class="hint">Token wygenerujesz w Cloudronie: profil użytkownika → tokeny API (odczyt i zapis).</p>
         <button type="submit">Dodaj serwer</button>
         <div id="server-msg" class="error"></div>

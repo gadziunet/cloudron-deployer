@@ -52,5 +52,8 @@ export function openDb(dataDir) {
     );
     INSERT OR IGNORE INTO environments(name) VALUES ('testowa'), ('produkcja');
   `);
+  // migracja: data ważności tokenu serwera (YYYY-MM-DD, wpisywana ręcznie)
+  const cols = db.prepare('PRAGMA table_info(servers)').all().map((c) => c.name);
+  if (!cols.includes('token_expires')) db.exec('ALTER TABLE servers ADD COLUMN token_expires TEXT');
   return db;
 }

@@ -55,3 +55,14 @@ export async function verifyCloudron(fetchFn, address, token) {
   const data = await res.json();
   return { username: data.username || data.email || 'nieznany' };
 }
+
+// Data ważności tokenu: pusta = brak daty, inaczej poprawne YYYY-MM-DD
+export function parseExpires(input) {
+  if (input === undefined || input === null || String(input).trim() === '') return null;
+  const v = String(input).trim();
+  const d = new Date(`${v}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) {
+    throw new UserError('Niepoprawna data (format RRRR-MM-DD)');
+  }
+  return v;
+}

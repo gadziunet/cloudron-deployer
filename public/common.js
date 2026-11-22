@@ -25,3 +25,19 @@ export function bindLogout() {
     location.href = '/';
   });
 }
+
+// Tekst i kolor dla daty ważności tokenu (YYYY-MM-DD lub null)
+export function expiryInfo(date) {
+  if (!date) return { text: 'brak daty ważności', cls: 'muted' };
+  const days = Math.ceil((new Date(`${date}T23:59:59`) - new Date()) / 86_400_000);
+  if (days < 0) return { text: `WYGASŁ ${date}`, cls: 'err-text' };
+  if (days <= 14) return { text: `ważny do ${date} (zostało ${days} dni)`, cls: 'warn-text' };
+  return { text: `ważny do ${date} (zostało ${days} dni)`, cls: 'ok-text' };
+}
+
+export function dateInput(value, onchange) {
+  const input = el('input', { type: 'date', value: value || '', title: 'Ważny do' });
+  input.className = 'date';
+  input.addEventListener('change', () => onchange(input.value));
+  return input;
+}
