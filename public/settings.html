@@ -7,11 +7,7 @@
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <header>
-    <strong>Wdrażacz</strong>
-    <nav><a href="/">Repozytoria</a> <a href="/history.html">Historia</a> <a href="/settings.html">Ustawienia</a></nav>
-    <button id="logout" class="secondary flat">Wyloguj</button>
-  </header>
+  <header></header>
   <main>
     <section class="card">
       <h1>GitHub</h1>
@@ -33,9 +29,12 @@
     <section class="card">
       <h1>Serwery Cloudron</h1>
       <div id="servers">Ładowanie...</div>
-      <button id="sync-registry" class="secondary">Zsynchronizuj ghcr.io na serwerach</button>
+      <div class="actions">
+        <button id="add-server" type="button">+ Dodaj serwer</button>
+        <button id="sync-registry" type="button" class="secondary">Zsynchronizuj ghcr.io</button>
+      </div>
       <div id="sync-msg" class="hint"></div>
-      <form id="server-form">
+      <form id="server-form" class="inline-form" hidden>
         <label for="server-name">Nazwa (np. Test, Produkcja)</label>
         <input id="server-name" required maxlength="60">
         <label for="server-kind">Rodzaj serwera</label>
@@ -50,7 +49,10 @@
         <label for="server-expires">Token ważny do (opcjonalnie)</label>
         <input id="server-expires" type="date">
         <p class="hint">Token wygenerujesz w Cloudronie: Settings → System → API (token z odczytem i zapisem).</p>
-        <button type="submit">Dodaj serwer</button>
+        <div class="actions">
+          <button type="submit">Zapisz serwer</button>
+          <button type="button" id="cancel-server" class="secondary">Anuluj</button>
+        </div>
         <div id="server-msg" class="error"></div>
       </form>
     </section>

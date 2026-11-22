@@ -1,6 +1,6 @@
-import { api, el, bindLogout, STATUS } from './common.js';
+import { api, el, initHeader, STATUS } from './common.js';
 
-bindLogout();
+initHeader();
 
 async function load() {
   const box = document.getElementById('list');

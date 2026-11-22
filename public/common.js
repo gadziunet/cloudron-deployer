@@ -19,11 +19,27 @@ export function el(tag, props = {}, ...children) {
   return node;
 }
 
-export function bindLogout() {
-  document.getElementById('logout').addEventListener('click', async () => {
-    await api('/api/logout', { method: 'POST' });
-    location.href = '/';
+const NAV = [['/', 'Repozytoria'], ['/history.html', 'Historia'], ['/settings.html', 'Ustawienia']];
+
+// Wspólny nagłówek: nazwa, menu (na telefonie rozwijane przyciskiem) i wylogowanie
+export function initHeader() {
+  const header = document.querySelector('header');
+  if (!header) return;
+  const here = location.pathname === '/index.html' ? '/' : location.pathname;
+  const nav = el('nav', { class: 'nav', id: 'nav' },
+    ...NAV.map(([href, text]) => el('a', { href, textContent: text, class: here === href ? 'active' : '' })),
+    el('button', {
+      class: 'secondary', id: 'logout', textContent: 'Wyloguj',
+      onclick: async () => { await api('/api/logout', { method: 'POST' }); location.href = '/'; },
+    }));
+  const toggle = el('button', {
+    class: 'menu-toggle', id: 'menu-toggle', textContent: '☰', title: 'Menu',
+    onclick: () => {
+      const open = nav.classList.toggle('open');
+      toggle.textContent = open ? '✕' : '☰';
+    },
   });
+  header.replaceChildren(el('a', { class: 'brand', href: '/', textContent: 'Wdrażacz' }), toggle, nav);
 }
 
 // Tekst i kolor dla daty ważności tokenu (YYYY-MM-DD lub null)

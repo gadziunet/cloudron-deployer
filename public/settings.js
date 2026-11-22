@@ -1,6 +1,6 @@
-import { api, el, bindLogout, expiryInfo, dateInput } from './common.js';
+import { api, el, initHeader, expiryInfo, dateInput } from './common.js';
 
-bindLogout();
+initHeader();
 const $ = (id) => document.getElementById(id);
 
 function say(box, text, ok = false) {
@@ -44,7 +44,7 @@ async function loadGithub() {
           loadGithub();
         })),
       el('button', {
-        class: 'danger flat', textContent: 'Usuń',
+        class: 'danger', textContent: 'Usuń',
         onclick: async () => { await api('/api/settings/github', { method: 'DELETE' }); loadGithub(); },
       })));
   } else {
@@ -89,9 +89,9 @@ async function loadServers() {
           await api(`/api/servers/${s.id}`, { method: 'PATCH', body: JSON.stringify({ expires: value }) });
           loadAll();
         })),
-      el('span', {},
+      el('span', { class: 'actions' },
         el('button', {
-          class: 'secondary flat', textContent: 'Sprawdź',
+          class: 'secondary', textContent: 'Sprawdź',
           onclick: async () => {
             status.textContent = `${s.address} - sprawdzam...`;
             try { const r = await api(`/api/servers/${s.id}/check`, { method: 'POST' }); status.textContent = `${s.address} - OK (${r.username})`; }
@@ -99,7 +99,7 @@ async function loadServers() {
           },
         }),
         el('button', {
-          class: 'danger flat', textContent: 'Usuń',
+          class: 'danger', textContent: 'Usuń',
           onclick: async () => {
             if (!confirm(`Usunąć serwer ${s.name}?`)) return;
             await api(`/api/servers/${s.id}`, { method: 'DELETE' });
@@ -122,10 +122,24 @@ $('server-form').addEventListener('submit', async (e) => {
       body: JSON.stringify({ name: $('server-name').value, address: $('server-address').value, token: $('server-token').value, expires: $('server-expires').value, kind: $('server-kind').value }),
     });
     e.target.reset();
-    say($('server-msg'), `Dodano. Token należy do: ${r.username}`, true);
+    $('server-form').hidden = true;
+    $('add-server').hidden = false;
+    say($('sync-msg'), `Dodano serwer. Token należy do: ${r.username}`, true);
     if (r.registry) showRegistry([r.registry]);
     loadAll();
   } catch (err) { say($('server-msg'), err.message); }
+});
+
+$('add-server').addEventListener('click', () => {
+  $('server-form').hidden = false;
+  $('add-server').hidden = true;
+  $('server-name').focus();
+});
+$('cancel-server').addEventListener('click', () => {
+  $('server-form').reset();
+  $('server-msg').textContent = '';
+  $('server-form').hidden = true;
+  $('add-server').hidden = false;
 });
 
 // --- Ręczna synchronizacja ghcr.io

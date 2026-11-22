@@ -1,6 +1,6 @@
-import { api, el, bindLogout, STATUS, followDeployment } from './common.js';
+import { api, el, initHeader, STATUS, followDeployment } from './common.js';
 
-bindLogout();
+initHeader();
 const $ = (id) => document.getElementById(id);
 const name = new URLSearchParams(location.search).get('name') || '';
 const [owner, repo] = name.split('/');

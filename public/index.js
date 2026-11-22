@@ -1,6 +1,6 @@
-import { api, el, bindLogout } from './common.js';
+import { api, el, initHeader } from './common.js';
 
-bindLogout();
+initHeader();
 
 async function showAlerts() {
   const box = document.getElementById('alerts');
@@ -15,12 +15,13 @@ async function showAlerts() {
 let repos = [];
 function render() {
   const box = document.getElementById('repos');
+  box.className = 'repos';
   const q = document.getElementById('filter').value.trim().toLowerCase();
   box.textContent = '';
   const shown = repos.filter((r) => r.full_name.toLowerCase().includes(q));
   if (!shown.length) box.textContent = 'Brak repozytoriów.';
   for (const r of shown) {
-    box.append(el('a', { class: 'row repo', href: `/repo.html?name=${encodeURIComponent(r.full_name)}` },
+    box.append(el('a', { class: 'repo', href: `/repo.html?name=${encodeURIComponent(r.full_name)}` },
       el('span', {}, r.full_name, el('small', { textContent: r.description })),
       el('span', { class: 'muted', textContent: r.private ? 'prywatne' : 'publiczne' })));
   }

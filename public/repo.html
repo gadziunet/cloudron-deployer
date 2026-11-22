@@ -7,11 +7,7 @@
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <header>
-    <strong>Wdrażacz</strong>
-    <nav><a href="/">Repozytoria</a> <a href="/history.html">Historia</a> <a href="/settings.html">Ustawienia</a></nav>
-    <button id="logout" class="secondary flat">Wyloguj</button>
-  </header>
+  <header></header>
   <main>
     <div id="alerts"></div>
     <div class="card">
@@ -30,8 +26,10 @@
       <input id="domain" autocomplete="off" placeholder="app.example.com">
       <p id="domain-hint" class="hint"></p>
 
-      <button id="deploy">Wdróż (aktualizuj)</button>
-      <button id="install" class="secondary">Zainstaluj nową</button>
+      <div class="actions">
+        <button id="deploy">Wdróż (aktualizuj)</button>
+        <button id="install" class="secondary">Zainstaluj nową</button>
+      </div>
       <p class="hint">„Wdróż” aktualizuje istniejącą aplikację pod tą domeną. „Zainstaluj nową” tworzy ją na serwerze, gdy jeszcze jej tam nie ma (wpisz pełną domenę, np. app.example.com).</p>
     </div>
 
