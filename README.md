@@ -34,6 +34,12 @@ Budowanie lokalnie zamiast pobierania: `docker build -t cloudron-deployer .` i w
 `APP_SECRET` szyfruje tokeny w bazie. Jego zmiana unieważnia zapisane tokeny.
 `ADMIN_PASSWORD` działa tylko przy pierwszym starcie; potem hasło zmienia się w aplikacji.
 
+## Aktualizacja i instalacja
+
+Przycisk "Wdroz" robi `cloudron update` istniejacej aplikacji (jej domena musi byc na serwerze).
+Przycisk "Zainstaluj nowa" robi `cloudron install` pod wpisana pelna domena, gdy aplikacji jeszcze nie ma.
+Przed instalacja aplikacja sprawdza, czy domena pasuje do domen skonfigurowanych w Cloudronie.
+
 ## Wiele serwerow
 
 Kazdy serwer Cloudron ma w ustawieniach rodzaj (testowy lub produkcyjny). Na stronie repozytorium wybierasz

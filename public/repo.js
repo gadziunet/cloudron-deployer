@@ -75,18 +75,25 @@ async function init() {
   } catch (e) { $('error').textContent = e.message; }
 }
 
-async function deploy() {
+async function run(action) {
   $('error').textContent = '';
   const tag = $('tag').value;
   const s = currentServer();
   if (!tag) { $('error').textContent = 'Brak tagu do wdrożenia.'; return; }
   if (!s) { $('error').textContent = 'Wybierz serwer.'; return; }
-  if (!$('domain').value.trim()) { $('error').textContent = 'Wpisz domenę aplikacji.'; return; }
-  if (s.kind === 'produkcja' && !confirm(`Wdrożyć ${name}:${tag} na serwer produkcyjny ${s.name}?`)) return;
+  const domain = $('domain').value.trim();
+  if (!domain) { $('error').textContent = 'Wpisz domenę aplikacji.'; return; }
+  if (action === 'install') {
+    if (!domain.includes('.')) { $('error').textContent = 'Do instalacji wpisz pełną domenę (np. app.example.com).'; return; }
+    if (!confirm(`Zainstalować NOWĄ aplikację ${name}:${tag} na serwerze ${s.name} pod adresem ${domain}?`)) return;
+  } else if (s.kind === 'produkcja' && !confirm(`Wdrożyć ${name}:${tag} na serwer produkcyjny ${s.name}?`)) {
+    return;
+  }
   $('deploy').disabled = true;
+  $('install').disabled = true;
   try {
-    if ($('domain').value.trim() !== targets[s.id]) await saveDomain();
-    const { id } = await api('/api/deployments', { method: 'POST', body: JSON.stringify({ repo: name, tag, server_id: s.id }) });
+    if (domain !== targets[s.id]) await saveDomain();
+    const { id } = await api('/api/deployments', { method: 'POST', body: JSON.stringify({ repo: name, tag, server_id: s.id, action }) });
     $('run').hidden = false;
     await followDeployment(id, (d) => {
       const st = STATUS[d.status] || { text: d.status, cls: '' };
@@ -99,10 +106,12 @@ async function deploy() {
     $('error').textContent = e.message;
   } finally {
     $('deploy').disabled = false;
+    $('install').disabled = false;
   }
 }
 
-$('deploy').addEventListener('click', deploy);
+$('deploy').addEventListener('click', () => run('update'));
+$('install').addEventListener('click', () => run('install'));
 $('server').addEventListener('change', () => {
   try { localStorage.setItem(`server:${name}`, $('server').value); } catch { /* brak pamieci przegladarki */ }
   showServer();

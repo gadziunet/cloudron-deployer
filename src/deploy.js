@@ -59,8 +59,19 @@ export async function findCloudronApp(fetchFn, address, token, domain) {
   if (!res.ok) throw new UserError(`Cloudron zwrocil blad ${res.status}`);
   const { apps = [] } = await res.json();
   const app = apps.find((a) => String(a.fqdn).toLowerCase() === domain.toLowerCase());
-  if (!app) throw new UserError(`Na serwerze ${address} nie ma aplikacji o domenie ${domain}`);
-  return { id: app.id, fqdn: app.fqdn };
+  return app ? { id: app.id, fqdn: app.fqdn } : null;
+}
+
+// Domeny skonfigurowane w Cloudronie (potrzebne do instalacji). null = nie udalo sie odczytac.
+export async function listCloudronDomains(fetchFn, address, token) {
+  try {
+    const res = await cloudronRequest(fetchFn, address, token, '/api/v1/domains');
+    if (!res.ok) return null;
+    const { domains = [] } = await res.json();
+    return domains.map((d) => String(d.domain).toLowerCase());
+  } catch {
+    return null;
+  }
 }
 
 function safeRelPath(p) {
@@ -92,7 +103,8 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
   function stamp() { return new Date().toISOString().slice(11, 19); }
 
   async function run(id, ctx) {
-    const { repo, tag, server, serverToken, domain, gh } = ctx;
+    const { repo, tag, server, serverToken, domain, gh, action } = ctx;
+    const installing = action === 'install';
     const [owner, name] = repo.split('/');
     const image = `ghcr.io/${owner}/${name}`.toLowerCase();
     const secrets = [serverToken, gh.token].filter(Boolean);
@@ -113,7 +125,7 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
 
     let status = 'failed';
     try {
-      log(`Wdrazanie ${repo}:${tag} -> serwer ${server.name} (${server.kind}), ${domain}`);
+      log(`${installing ? 'Instalacja' : 'Wdrazanie'} ${repo}:${tag} -> serwer ${server.name} (${server.kind}), ${domain}`);
 
       const exists = await imageExists(fetchFn, gh, owner, name, tag);
       if (exists === 'no') throw new UserError(`Obraz ${image}:${tag} nie istnieje w ghcr.io`);
@@ -122,7 +134,20 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
         : 'Nie udalo sie sprawdzic obrazu w ghcr.io (brak uprawnien read:packages?). Kontynuuje.');
 
       const app = await findCloudronApp(fetchFn, server.address, serverToken, domain);
-      log(`Aplikacja na serwerze: ${app.fqdn} (${app.id})`);
+      if (installing) {
+        if (app) throw new UserError(`Na serwerze ${server.address} aplikacja o domenie ${domain} juz istnieje. Uzyj przycisku Wdroz, zeby ja zaktualizowac.`);
+        const domains = await listCloudronDomains(fetchFn, server.address, serverToken);
+        if (domains === null) {
+          log('Nie udalo sie odczytac domen z Cloudrona, kontynuuje bez tego sprawdzenia.');
+        } else if (!domains.some((d) => domain === d || domain.endsWith(`.${d}`))) {
+          throw new UserError(`Serwer ${server.address} nie ma domeny pasujacej do ${domain} (dostepne: ${domains.join(', ') || 'brak'})`);
+        } else {
+          log(`Domena ${domain} jest dostepna na serwerze, aplikacji jeszcze nie ma. Zainstaluje nowa.`);
+        }
+      } else {
+        if (!app) throw new UserError(`Na serwerze ${server.address} nie ma aplikacji o domenie ${domain}. Uzyj przycisku Zainstaluj, zeby ja utworzyc.`);
+        log(`Aplikacja na serwerze: ${app.fqdn} (${app.id})`);
+      }
 
       workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wdr-deploy-'));
       // Tag obrazu nie musi byc tagiem git (np. obraz 0.3.1, tag git v0.3.1 albo brak): probujemy po kolei
@@ -155,16 +180,19 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
         log(`Pobrano plik z manifestu: ${rel}`);
       }
 
-      log('Uruchamiam: cloudron update');
+      log(`Uruchamiam: cloudron ${installing ? 'install' : 'update'}`);
+      const cliArgs = installing
+        ? ['--server', server.address, '--wait-timeout', '15m', 'install', '--location', domain, '--image', `${image}:${tag}`]
+        : ['--server', server.address, '--wait-timeout', '15m', 'update', '--app', app.id, '--image', `${image}:${tag}`];
       const code = await runCli({
-        args: ['--server', server.address, '--wait-timeout', '15m', 'update', '--app', app.id, '--image', `${image}:${tag}`],
+        args: cliArgs,
         // token tylko w zmiennej srodowiskowej (nie w argumentach), HOME w katalogu tymczasowym
         env: { PATH: process.env.PATH, HOME: workDir, CLOUDRON_CLI_AUTH_TOKEN: serverToken, NO_COLOR: '1' },
         cwd: workDir,
         onData: append,
       });
       if (code !== 0) throw new UserError(`Cloudron CLI zakonczylo sie kodem ${code}`);
-      log('Gotowe: aplikacja zaktualizowana.');
+      log(installing ? 'Gotowe: aplikacja zainstalowana.' : 'Gotowe: aplikacja zaktualizowana.');
       status = 'success';
     } catch (e) {
       if (e instanceof UserError) log(`BLAD: ${e.message}`);
@@ -177,7 +205,8 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
   }
 
   // Kontrole przed startem (błędy wracają od razu), potem wdrożenie działa w tle.
-  async function start({ repo, tag, server_id: serverId }) {
+  async function start({ repo, tag, server_id: serverId, action = 'update' }) {
+    if (!['update', 'install'].includes(action)) throw new UserError('Nieznana operacja (update lub install)');
     const parts = String(repo || '').split('/');
     if (parts.length !== 2) throw new UserError('Niepoprawna nazwa repozytorium');
     checkRepoName(parts[0], parts[1]);
@@ -187,6 +216,9 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
     if (!server) throw new UserError('Nie ma takiego serwera (wybierz serwer)', 404);
     const target = db.prepare('SELECT app_domain FROM server_targets WHERE repo = ? AND server_id = ?').get(repo, server.id);
     if (!target) throw new UserError('Najpierw wpisz domene aplikacji dla tego serwera', 409);
+    if (action === 'install' && !target.app_domain.includes('.')) {
+      throw new UserError('Do instalacji wpisz pelna domene (np. app.example.com)');
+    }
     const gh = getGithub();
     if (!gh.token) throw new UserError('Najpierw dodaj token GitHub w ustawieniach', 409);
 
@@ -199,8 +231,8 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
     if (busy) throw new UserError(`Ta aplikacja jest wlasnie wdrazana (wdrozenie nr ${busy.id})`, 409);
 
     const info = db.prepare(
-      "INSERT INTO deployments(repo, tag, environment, server_name, app_domain, status) VALUES (?, ?, ?, ?, ?, 'running')"
-    ).run(repo, tag, server.kind, server.name, target.app_domain);
+      "INSERT INTO deployments(repo, tag, environment, server_name, app_domain, status, action) VALUES (?, ?, ?, ?, ?, 'running', ?)"
+    ).run(repo, tag, server.kind, server.name, target.app_domain, action);
     const id = Number(info.lastInsertRowid);
 
     const done = run(id, {
@@ -208,6 +240,7 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
       serverToken: vault.decrypt(server.token_enc),
       domain: target.app_domain,
       gh,
+      action,
     });
     return { id, done };
   }

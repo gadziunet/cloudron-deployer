@@ -12,7 +12,7 @@ async function load() {
     const log = el('pre', { class: 'log' });
     log.hidden = true;
     const head = el('div', { class: 'row clickable' },
-      el('span', {}, `${d.repo}:${d.tag}`,
+      el('span', {}, `${d.repo}:${d.tag}${d.action === 'install' ? ' (instalacja)' : ''}`,
         el('small', { textContent: `${d.environment} · ${d.server_name || '?'} · ${d.app_domain || '?'} · ${d.started_at} UTC` })),
       el('span', { class: st.cls, textContent: st.text }));
     head.addEventListener('click', async () => {

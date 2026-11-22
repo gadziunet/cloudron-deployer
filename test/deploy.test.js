@@ -10,7 +10,7 @@ const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'wdrazacz' }
 const quiet = { info() {}, warn() {} };
 let server, base, dir, cookie, app, serverId;
 let slow = null;
-let imageTags = [], missingRefs = [];
+let imageTags = [], missingRefs = [], cloudronDomains = ['example.com'];
 let ghcrStatus, cliExit, cliOutput, manifest, cliCalls, appsOnServer, files;
 
 const res = (status, body, text) => ({
@@ -34,6 +34,7 @@ const fakeFetch = async (url, opts = {}) => {
   if (u.startsWith('https://ghcr.io/token')) return res(200, { token: 'ghcr-bearer' });
   if (u.startsWith('https://ghcr.io/v2/przyklad/aplikacja-a/manifests/')) return res(ghcrStatus, {});
   if (u === 'https://test.example.com/api/v1/profile') return auth === 'Bearer cl-ok' ? res(200, { username: 'admin' }) : res(401, {});
+  if (u === 'https://test.example.com/api/v1/domains') return cloudronDomains === null ? res(500, {}) : res(200, { domains: cloudronDomains.map((domain) => ({ domain })) });
   if (u === 'https://test.example.com/api/v1/apps') return auth === 'Bearer cl-ok' ? res(200, { apps: appsOnServer }) : res(401, {});
   return res(404, {});
 };
@@ -64,7 +65,7 @@ const call = (method, p, body) => fetch(base + p, {
 const reset = () => {
   ghcrStatus = 200; cliExit = 0; cliOutput = 'Waiting for app to be updated ...\nApp is updated.\n';
   manifest = JSON.stringify({ id: 'com.example.aplikacja', version: '0.3.1' });
-  cliCalls = []; files = {}; imageTags = []; missingRefs = [];
+  cliCalls = []; files = {}; imageTags = []; missingRefs = []; cloudronDomains = ['example.com'];
   appsOnServer = [{ id: '11111111-2222-3333-4444-555555555555', fqdn: 'app-dev.example.com' }];
 };
 const deploy = async (body) => {
@@ -247,6 +248,64 @@ test('tag, którego nie ma ani w ghcr.io, ani w git: 404', async () => {
   reset(); imageTags = ['0.4.0'];
   assert.equal((await deploy({ ...body, tag: '9.9.9' })).status, 404);
 });
+
+test('instalacja nowej aplikacji: cloudron install z pełną domeną, wpis action=install w historii', async () => {
+  reset(); appsOnServer = [];
+  const r = await deploy({ ...body, action: 'install' });
+  assert.equal(r.status, 202);
+  const row = await waitDone((await r.json()).id);
+  assert.equal(row.status, 'success');
+  assert.equal(row.action, 'install');
+  assert.deepEqual(cliCalls[0].args, ['--server', 'test.example.com', '--wait-timeout', '15m', 'install',
+    '--location', 'app-dev.example.com', '--image', 'ghcr.io/przyklad/aplikacja-a:v0.3.1']);
+  assert.equal(cliCalls[0].env.CLOUDRON_CLI_AUTH_TOKEN, 'cl-ok');
+  assert.match(row.log, /Gotowe: aplikacja zainstalowana/);
+});
+
+test('instalacja, gdy aplikacja już istnieje: odmowa przed CLI, podpowiedź o przycisku Wdróż', async () => {
+  reset();
+  const row = await waitDone((await (await deploy({ ...body, action: 'install' })).json()).id);
+  assert.equal(row.status, 'failed');
+  assert.match(row.log, /juz istnieje/);
+  assert.match(row.log, /Wdroz/);
+  assert.equal(cliCalls.length, 0);
+});
+
+test('instalacja na domenie, której Cloudron nie ma: błąd z listą dostępnych domen', async () => {
+  reset(); appsOnServer = []; cloudronDomains = ['inna.org', 'jeszcze.net'];
+  const row = await waitDone((await (await deploy({ ...body, action: 'install' })).json()).id);
+  assert.equal(row.status, 'failed');
+  assert.match(row.log, /nie ma domeny pasujacej do app-dev\.example\.com \(dostepne: inna\.org, jeszcze\.net\)/);
+  assert.equal(cliCalls.length, 0);
+});
+
+test('instalacja, gdy nie da się odczytać domen: kontynuuje z adnotacją w logu', async () => {
+  reset(); appsOnServer = []; cloudronDomains = null;
+  const row = await waitDone((await (await deploy({ ...body, action: 'install' })).json()).id);
+  assert.equal(row.status, 'success');
+  assert.match(row.log, /Nie udalo sie odczytac domen/);
+});
+
+test('aktualizacja nieistniejącej aplikacji podpowiada przycisk Zainstaluj', async () => {
+  reset(); appsOnServer = [];
+  const row = await waitDone((await (await deploy(body)).json()).id);
+  assert.equal(row.status, 'failed');
+  assert.match(row.log, /Zainstaluj/);
+  assert.equal(row.action, 'update');
+});
+
+test('instalacja wymaga pełnej domeny, a zła operacja jest odrzucona', async () => {
+  reset();
+  await call('PUT', `/api/repos/przyklad/aplikacja-a/targets/${serverId}`, { app_domain: 'app' });
+  let r = await deploy({ ...body, action: 'install' });
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /pelna domene/);
+  await call('PUT', `/api/repos/przyklad/aplikacja-a/targets/${serverId}`, { app_domain: 'app-dev.example.com' });
+  r = await deploy({ ...body, action: 'usun' });
+  assert.equal(r.status, 400);
+  assert.equal(cliCalls.length, 0);
+});
+
 
 test('po restarcie wdrożenia w toku dostają status interrupted', async () => {
   app.db.prepare("INSERT INTO deployments(repo, tag, environment, status) VALUES ('a/b', 'v1', 'testowa', 'running')").run();

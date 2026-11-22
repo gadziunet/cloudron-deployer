@@ -56,6 +56,10 @@ export function openDb(dataDir) {
   const cols = db.prepare('PRAGMA table_info(servers)').all().map((c) => c.name);
   if (!cols.includes('token_expires')) db.exec('ALTER TABLE servers ADD COLUMN token_expires TEXT');
 
+  // rodzaj operacji w historii: update (aktualizacja) albo install (nowa instalacja)
+  const depCols = db.prepare('PRAGMA table_info(deployments)').all().map((c) => c.name);
+  if (!depCols.includes('action')) db.exec("ALTER TABLE deployments ADD COLUMN action TEXT NOT NULL DEFAULT 'update'");
+
   // wiele serwerow: kazdy serwer ma rodzaj (testowa/produkcja), a domena aplikacji jest per serwer
   db.exec(`CREATE TABLE IF NOT EXISTS server_targets (
     repo TEXT NOT NULL,

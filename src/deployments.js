@@ -7,7 +7,7 @@ export function deploymentsRouter({ db, deployer }) {
   router.post('/deployments', async (req, res) => {
     try {
       const { id } = await deployer.start({
-        repo: req.body?.repo, tag: req.body?.tag, server_id: req.body?.server_id,
+        repo: req.body?.repo, tag: req.body?.tag, server_id: req.body?.server_id, action: req.body?.action,
       });
       res.status(202).json({ id });
     } catch (e) {
@@ -20,8 +20,8 @@ export function deploymentsRouter({ db, deployer }) {
   router.get('/deployments', (req, res) => {
     const repo = typeof req.query.repo === 'string' ? req.query.repo : null;
     const rows = repo
-      ? db.prepare('SELECT id, repo, tag, environment, server_name, app_domain, status, started_at, finished_at FROM deployments WHERE repo = ? ORDER BY id DESC LIMIT 50').all(repo)
-      : db.prepare('SELECT id, repo, tag, environment, server_name, app_domain, status, started_at, finished_at FROM deployments ORDER BY id DESC LIMIT 50').all();
+      ? db.prepare('SELECT id, repo, tag, environment, action, server_name, app_domain, status, started_at, finished_at FROM deployments WHERE repo = ? ORDER BY id DESC LIMIT 50').all(repo)
+      : db.prepare('SELECT id, repo, tag, environment, action, server_name, app_domain, status, started_at, finished_at FROM deployments ORDER BY id DESC LIMIT 50').all();
     res.json(rows);
   });
 
