@@ -2,8 +2,9 @@ import express from 'express';
 import { UserError, normalizeAddress } from './integrations.js';
 import { checkRepoName } from './github.js';
 import { sortTags, latestTag } from './tags.js';
+import { listDeployableTags } from './ghcr.js';
 
-export function reposRouter({ db, github }) {
+export function reposRouter({ db, github, fetchFn, getGithub }) {
   const router = express.Router();
 
   const wrap = (fn) => async (req, res) => {
@@ -21,9 +22,11 @@ export function reposRouter({ db, github }) {
   }));
 
   router.get('/repos/:owner/:repo/tags', wrap(async (req, res) => {
-    const names = await github.listTagNames(req.params.owner, req.params.repo);
-    const tags = sortTags(names);
-    res.json({ latest: latestTag(tags), tags });
+    const { owner, repo } = req.params;
+    checkRepoName(owner, repo);
+    const { names, imageTags, warning } = await listDeployableTags({ fetchFn, github, creds: getGithub(), owner, repo });
+    const tags = sortTags(names).map((t) => ({ ...t, image: imageTags.includes(t.name) }));
+    res.json({ latest: latestTag(tags), tags, warning });
   }));
 
   // Zapamiętane domeny aplikacji dla repozytorium: { testowa: "...", produkcja: "..." }

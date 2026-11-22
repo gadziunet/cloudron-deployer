@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { UserError, cloudronRequest } from './integrations.js';
 import { checkRepoName } from './github.js';
+import { getBearer, listDeployableTags } from './ghcr.js';
 
 const TAG_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
 const MAX_LOG = 200_000;
@@ -25,16 +26,10 @@ export function defaultRunCli({ args, env, cwd, onData }) {
 }
 
 // Czy obraz ghcr.io/<owner>/<repo>:<tag> istnieje? 'yes' | 'no' | 'unknown'
-export async function imageExists(fetchFn, { login, token }, owner, repo, tag) {
+export async function imageExists(fetchFn, creds, owner, repo, tag) {
   const image = `${owner}/${repo}`.toLowerCase();
   try {
-    const basic = Buffer.from(`${login || 'token'}:${token}`).toString('base64');
-    const t = await fetchFn(`https://ghcr.io/token?service=ghcr.io&scope=repository:${image}:pull`, {
-      headers: { Authorization: `Basic ${basic}` },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!t.ok) return 'unknown';
-    const { token: bearer } = await t.json();
+    const bearer = await getBearer(fetchFn, creds, image);
     if (!bearer) return 'unknown';
     const m = await fetchFn(`https://ghcr.io/v2/${image}/manifests/${encodeURIComponent(tag)}`, {
       method: 'HEAD',
@@ -130,14 +125,30 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
       log(`Aplikacja na serwerze: ${app.fqdn} (${app.id})`);
 
       workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wdr-deploy-'));
-      const manifestText = await github.getFileAtTag(owner, name, 'CloudronManifest.json', tag);
+      // Tag obrazu nie musi byc tagiem git (np. obraz 0.3.1, tag git v0.3.1 albo brak): probujemy po kolei
+      const refs = [...new Set([tag, tag.startsWith('v') ? tag.slice(1) : `v${tag}`])];
+      let manifestText = null;
+      let manifestRef = null;
+      for (const ref of [...refs, '']) {
+        try {
+          manifestText = await github.getFileAtTag(owner, name, 'CloudronManifest.json', ref);
+          manifestRef = ref;
+          break;
+        } catch (e) {
+          if (!(e instanceof UserError) || e.status !== 404) throw e;
+        }
+      }
+      if (manifestText === null) throw new UserError('Nie znaleziono CloudronManifest.json w repozytorium');
+      if (manifestRef === '') {
+        log(`UWAGA: brak tagu git dla wersji ${tag}. Uzywam CloudronManifest.json z domyslnej galezi, sprawdz czy pasuje do obrazu.`);
+      }
       let manifest;
       try { manifest = JSON.parse(manifestText); } catch { throw new UserError('CloudronManifest.json w repozytorium nie jest poprawnym JSON'); }
       fs.writeFileSync(path.join(workDir, 'CloudronManifest.json'), manifestText);
-      log(`Pobrano CloudronManifest.json dla tagu ${tag}`);
+      log(`Pobrano CloudronManifest.json (${manifestRef === '' ? 'domyslna galaz' : `ref ${manifestRef}`})`);
 
       for (const rel of referencedFiles(manifest)) {
-        const text = await github.getFileAtTag(owner, name, rel, tag);
+        const text = await github.getFileAtTag(owner, name, rel, manifestRef);
         const target = path.join(workDir, rel);
         fs.mkdirSync(path.dirname(target), { recursive: true });
         fs.writeFileSync(target, text);
@@ -181,8 +192,8 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
     const gh = getGithub();
     if (!gh.token) throw new UserError('Najpierw dodaj token GitHub w ustawieniach', 409);
 
-    const tags = await github.listTagNames(parts[0], parts[1]);
-    if (!tags.includes(tag)) throw new UserError('Taki tag nie istnieje w repozytorium', 404);
+    const { names } = await listDeployableTags({ fetchFn, github, creds: gh, owner: parts[0], repo: parts[1] });
+    if (!names.includes(tag)) throw new UserError('Taki tag nie istnieje (ani jako obraz w ghcr.io, ani jako tag git)', 404);
 
     // od tego miejsca bez await: kontrola blokady i zapis sa atomowe
     const busy = db.prepare("SELECT id FROM deployments WHERE status = 'running' AND server_name = ? AND app_domain = ?")

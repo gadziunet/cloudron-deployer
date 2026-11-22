@@ -50,14 +50,15 @@ async function init() {
     [servers, environments, targets] = await Promise.all([
       api('/api/servers'), api('/api/environments'), api(`${base}/targets`),
     ]);
-    const { latest, tags } = await api(`${base}/tags`);
+    const { latest, tags, warning } = await api(`${base}/tags`);
     if (!tags.length) {
-      $('tag-hint').textContent = 'To repozytorium nie ma jeszcze żadnego tagu.';
+      $('tag-hint').textContent = 'Nie znaleziono żadnego obrazu w ghcr.io ani tagu git.';
     }
+    if (warning) $('tag-hint').textContent = warning;
     for (const t of tags) {
       $('tag').append(el('option', {
         value: t.name,
-        textContent: t.name + (t.name === latest ? ' (najnowszy)' : '') + (t.prerelease ? ' [wstępna]' : ''),
+        textContent: t.name + (t.name === latest ? ' (najnowszy)' : '') + (t.prerelease ? ' [wstępna]' : '') + (t.image ? '' : ' [tylko tag git]'),
       }));
     }
     if (latest) $('tag').value = latest;

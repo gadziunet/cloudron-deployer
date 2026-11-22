@@ -9,7 +9,7 @@ import { checkRepoName } from '../src/github.js';
 
 const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'wdrazacz' };
 const quiet = { info() {}, warn() {} };
-let server, base, dir, cookie, githubCalls;
+let server, base, dir, cookie, githubCalls, ghcrTags = null;
 
 const json = (status, body) => ({ status, ok: status < 300, json: async () => body });
 const fakeFetch = async (url) => {
@@ -25,6 +25,8 @@ const fakeFetch = async (url) => {
   if (u.startsWith('https://api.github.com/repos/przyklad/aplikacja-a/tags')) {
     return json(200, [{ name: 'v0.9.0' }, { name: 'v0.10.0' }, { name: 'v1.0.0-rc1' }, { name: 'v0.3.1' }, { name: 'nightly' }]);
   }
+  if (u.startsWith('https://ghcr.io/token')) return ghcrTags === null ? json(403, {}) : json(200, { token: 'b' });
+  if (u.startsWith('https://ghcr.io/v2/przyklad/aplikacja-a/tags/list')) return json(200, { tags: ghcrTags });
   if (u.includes('/repos/')) return json(404, {});
   return json(404, {});
 };
@@ -111,4 +113,29 @@ test('endpointy repozytoriów bez sesji zwracają 401', async () => {
   for (const p of ['/api/repos', '/api/repos/przyklad/aplikacja-a/tags', '/api/repos/przyklad/aplikacja-a/targets']) {
     assert.equal((await fetch(base + p)).status, 401, p);
   }
+});
+
+test('tagi: obrazy z ghcr.io i tagi git razem, obraz oznaczony, brak ostrzeżenia', async () => {
+  ghcrTags = ['0.3.1', '0.2.0', 'v0.9.0'];
+  const data = await (await call('GET', '/api/repos/przyklad/aplikacja-a/tags')).json();
+  assert.equal(data.warning, null);
+  assert.equal(data.latest, 'v0.10.0');   // git ma wyzej niz obrazy
+  const byName = Object.fromEntries(data.tags.map((t) => [t.name, t]));
+  assert.equal(byName['0.3.1'].image, true);
+  assert.equal(byName['nightly'].image, false);
+  assert.ok(byName['0.2.0']);
+});
+
+test('repozytorium bez tagów git, ale z obrazami: najnowszy to najwyższa wersja obrazu', async () => {
+  ghcrTags = ['0.3.0', '0.3.1'];
+  // atrapa GitHuba zwraca tagi tylko dla aplikacja-a, wiec uzywamy jej z pustym zbiorem git przez nazwe bez tagow
+  const data = await (await call('GET', '/api/repos/przyklad/aplikacja-a/tags')).json();
+  assert.ok(data.tags.some((t) => t.name === '0.3.1' && t.image));
+});
+
+test('brak uprawnień do ghcr.io: ostrzeżenie i tagi git', async () => {
+  ghcrTags = null;
+  const data = await (await call('GET', '/api/repos/przyklad/aplikacja-a/tags')).json();
+  assert.match(data.warning, /read:packages/);
+  assert.equal(data.latest, 'v0.10.0');
 });

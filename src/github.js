@@ -69,10 +69,12 @@ export function makeGithub({ fetchFn, getToken }) {
     },
 
     // Zawartość pliku z repozytorium dla danego tagu (tekst)
+    // ref pusty = domyslna galaz repozytorium
     async getFileAtTag(owner, repo, filePath, tag) {
       checkRepoName(owner, repo);
       const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
-      return get(`/repos/${owner}/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(tag)}`, { raw: true });
+      const query = tag ? `?ref=${encodeURIComponent(tag)}` : '';
+      return get(`/repos/${owner}/${repo}/contents/${encodedPath}${query}`, { raw: true });
     },
   };
 }

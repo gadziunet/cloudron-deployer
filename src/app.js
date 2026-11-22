@@ -44,13 +44,11 @@ export function createApp(config, log = console, { fetchFn = fetch, runCli = def
     return row ? vault.decrypt(row.value_enc) : null;
   };
   const github = makeGithub({ fetchFn, getToken: () => readSecret('github_token') });
-  const deployer = makeDeployer({
-    db, vault, github, fetchFn, runCli,
-    getGithub: () => ({ token: readSecret('github_token'), login: readSecret('github_login') }),
-  });
+  const getGithub = () => ({ token: readSecret('github_token'), login: readSecret('github_login') });
+  const deployer = makeDeployer({ db, vault, github, fetchFn, runCli, getGithub });
   const registry = makeRegistrySync({ db, vault, fetchFn });
   app.use('/api', settingsRouter({ db, vault, fetchFn, registry, onGithubChange: () => github.clearCache() }));
-  app.use('/api', reposRouter({ db, github }));
+  app.use('/api', reposRouter({ db, github, fetchFn, getGithub }));
   app.use('/api', deploymentsRouter({ db, deployer }));
 
   // Strony statyczne: login.html jest publiczny, reszta ładuje dane przez /api

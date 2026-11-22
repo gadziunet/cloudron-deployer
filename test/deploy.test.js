@@ -10,6 +10,7 @@ const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'wdrazacz' }
 const quiet = { info() {}, warn() {} };
 let server, base, dir, cookie, app, serverId;
 let slow = null;
+let imageTags = [], missingRefs = [];
 let ghcrStatus, cliExit, cliOutput, manifest, cliCalls, appsOnServer, files;
 
 const res = (status, body, text) => ({
@@ -23,10 +24,13 @@ const fakeFetch = async (url, opts = {}) => {
   if (u.startsWith('https://api.github.com/repos/przyklad/aplikacja-a/tags')) return res(200, [{ name: 'v0.3.1' }, { name: 'v0.3.0' }]);
   if (u.startsWith('https://api.github.com/repos/przyklad/aplikacja-a/contents/')) {
     const file = decodeURIComponent(u.split('/contents/')[1].split('?')[0]);
+    const ref = new URL(u).searchParams.get('ref') ?? '';
+    if (missingRefs.includes(ref)) return res(404, {});
     if (file === 'CloudronManifest.json') return res(200, null, manifest);
     if (files[file] !== undefined) return res(200, null, files[file]);
     return res(404, {});
   }
+  if (u.startsWith('https://ghcr.io/v2/przyklad/aplikacja-a/tags/list')) return res(200, { tags: imageTags });
   if (u.startsWith('https://ghcr.io/token')) return res(200, { token: 'ghcr-bearer' });
   if (u.startsWith('https://ghcr.io/v2/przyklad/aplikacja-a/manifests/')) return res(ghcrStatus, {});
   if (u === 'https://test.example.com/api/v1/profile') return auth === 'Bearer cl-ok' ? res(200, { username: 'admin' }) : res(401, {});
@@ -60,7 +64,7 @@ const call = (method, p, body) => fetch(base + p, {
 const reset = () => {
   ghcrStatus = 200; cliExit = 0; cliOutput = 'Waiting for app to be updated ...\nApp is updated.\n';
   manifest = JSON.stringify({ id: 'com.example.aplikacja', version: '0.3.1' });
-  cliCalls = []; files = {};
+  cliCalls = []; files = {}; imageTags = []; missingRefs = [];
   appsOnServer = [{ id: '11111111-2222-3333-4444-555555555555', fqdn: 'app-dev.example.com' }];
 };
 const deploy = async (body) => {
@@ -218,6 +222,29 @@ test('wdrożenia bez sesji zwracają 401', async () => {
   for (const [m, p] of [['POST', '/api/deployments'], ['GET', '/api/deployments'], ['GET', '/api/deployments/1']]) {
     assert.equal((await fetch(base + p, { method: m, headers: H })).status, 401, p);
   }
+});
+
+test('tag istnieje tylko jako obraz (bez tagu git): manifest z domyślnej gałęzi, z ostrzeżeniem w logu', async () => {
+  reset(); imageTags = ['0.4.0']; missingRefs = ['0.4.0', 'v0.4.0'];
+  const r = await deploy({ ...body, tag: '0.4.0' });
+  assert.equal(r.status, 202);
+  const row = await waitDone((await r.json()).id);
+  assert.equal(row.status, 'success');
+  assert.match(row.log, /UWAGA: brak tagu git dla wersji 0\.4\.0/);
+  assert.equal(cliCalls[0].args.at(-1), 'ghcr.io/przyklad/aplikacja-a:0.4.0');
+});
+
+test('tag obrazu bez "v", a tag git z "v": manifest bierze z tagu git', async () => {
+  reset(); imageTags = ['0.3.1']; missingRefs = ['0.3.1'];
+  const row = await waitDone((await (await deploy({ ...body, tag: '0.3.1' })).json()).id);
+  assert.equal(row.status, 'success');
+  assert.match(row.log, /ref v0\.3\.1/);
+  assert.ok(!/UWAGA/.test(row.log));
+});
+
+test('tag, którego nie ma ani w ghcr.io, ani w git: 404', async () => {
+  reset(); imageTags = ['0.4.0'];
+  assert.equal((await deploy({ ...body, tag: '9.9.9' })).status, 404);
 });
 
 test('po restarcie wdrożenia w toku dostają status interrupted', async () => {
