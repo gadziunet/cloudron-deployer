@@ -5,31 +5,35 @@ const $ = (id) => document.getElementById(id);
 const name = new URLSearchParams(location.search).get('name') || '';
 const [owner, repo] = name.split('/');
 const base = `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+const KIND = { testowa: 'testowy', produkcja: 'produkcyjny' };
 
-let targets = { testowa: null, produkcja: null };
+let targets = {};   // { "<id serwera>": "domena" }
 let servers = [];
-let environments = [];
 
-function showEnvHint() {
-  const env = $('env').value;
-  const assigned = environments.find((e) => e.name === env)?.server_id;
-  const server = servers.find((s) => s.id === assigned);
-  $('server-hint').textContent = server
-    ? `Serwer: ${server.name} (${server.address})`
-    : 'Brak serwera dla tego środowiska. Wybierz go w ustawieniach.';
-  $('domain').value = targets[env] || '';
-  $('domain-hint').textContent = targets[env]
-    ? 'Zapamiętana dla tego repozytorium i środowiska.'
+const currentServer = () => servers.find((s) => String(s.id) === $('server').value);
+
+function showServer() {
+  const s = currentServer();
+  if (!s) {
+    $('server-hint').textContent = 'Brak serwerów. Dodaj serwer w ustawieniach.';
+    $('domain').value = '';
+    return;
+  }
+  $('server-hint').textContent = `${s.address} · serwer ${KIND[s.kind] || s.kind}`;
+  const domain = targets[s.id] || '';
+  $('domain').value = domain;
+  $('domain-hint').textContent = domain
+    ? 'Zapamiętana dla tego repozytorium i serwera.'
     : 'Przy pierwszym razie wpisz domenę, zostanie zapamiętana.';
 }
 
 async function saveDomain() {
+  const s = currentServer();
   const value = $('domain').value.trim();
-  if (!value) return;
-  const env = $('env').value;
+  if (!s || !value) return;
   try {
-    const r = await api(`${base}/targets/${env}`, { method: 'PUT', body: JSON.stringify({ app_domain: value }) });
-    targets[env] = r.app_domain;
+    const r = await api(`${base}/targets/${s.id}`, { method: 'PUT', body: JSON.stringify({ app_domain: value }) });
+    targets[s.id] = r.app_domain;
     $('domain').value = r.app_domain;
     $('domain-hint').textContent = 'Zapamiętano.';
     $('error').textContent = '';
@@ -47,9 +51,15 @@ async function init() {
   });
 
   try {
-    [servers, environments, targets] = await Promise.all([
-      api('/api/servers'), api('/api/environments'), api(`${base}/targets`),
-    ]);
+    [servers, targets] = await Promise.all([api('/api/servers'), api(`${base}/targets`)]);
+    for (const s of servers) {
+      $('server').append(el('option', { value: String(s.id), textContent: `${s.name} (${KIND[s.kind] || s.kind})` }));
+    }
+    // ostatnio wybrany serwer dla tego repozytorium
+    const saved = localStorage.getItem(`server:${name}`);
+    if (saved && servers.some((s) => String(s.id) === saved)) $('server').value = saved;
+    showServer();
+
     const { latest, tags, warning } = await api(`${base}/tags`);
     if (!tags.length) {
       $('tag-hint').textContent = 'Nie znaleziono żadnego obrazu w ghcr.io ani tagu git.';
@@ -62,21 +72,21 @@ async function init() {
       }));
     }
     if (latest) $('tag').value = latest;
-    showEnvHint();
   } catch (e) { $('error').textContent = e.message; }
 }
 
 async function deploy() {
   $('error').textContent = '';
   const tag = $('tag').value;
-  const env = $('env').value;
+  const s = currentServer();
   if (!tag) { $('error').textContent = 'Brak tagu do wdrożenia.'; return; }
+  if (!s) { $('error').textContent = 'Wybierz serwer.'; return; }
   if (!$('domain').value.trim()) { $('error').textContent = 'Wpisz domenę aplikacji.'; return; }
-  if (env === 'produkcja' && !confirm(`Wdrożyć ${name}:${tag} na PRODUKCJĘ?`)) return;
+  if (s.kind === 'produkcja' && !confirm(`Wdrożyć ${name}:${tag} na serwer produkcyjny ${s.name}?`)) return;
   $('deploy').disabled = true;
   try {
-    if ($('domain').value.trim() !== targets[env]) await saveDomain();
-    const { id } = await api('/api/deployments', { method: 'POST', body: JSON.stringify({ repo: name, tag, environment: env }) });
+    if ($('domain').value.trim() !== targets[s.id]) await saveDomain();
+    const { id } = await api('/api/deployments', { method: 'POST', body: JSON.stringify({ repo: name, tag, server_id: s.id }) });
     $('run').hidden = false;
     await followDeployment(id, (d) => {
       const st = STATUS[d.status] || { text: d.status, cls: '' };
@@ -93,6 +103,9 @@ async function deploy() {
 }
 
 $('deploy').addEventListener('click', deploy);
-$('env').addEventListener('change', showEnvHint);
+$('server').addEventListener('change', () => {
+  try { localStorage.setItem(`server:${name}`, $('server').value); } catch { /* brak pamieci przegladarki */ }
+  showServer();
+});
 $('domain').addEventListener('change', saveDomain);
 init();

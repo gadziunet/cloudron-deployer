@@ -75,8 +75,16 @@ async function loadServers() {
     const status = el('small', {}, s.address);
     const info = expiryInfo(s.expires);
     const expiry = el('small', { class: info.cls, textContent: `token: ${info.text}` });
+    const kind = el('select', { title: 'Rodzaj serwera' },
+      el('option', { value: 'testowa', textContent: 'Testowy' }),
+      el('option', { value: 'produkcja', textContent: 'Produkcyjny' }));
+    kind.className = 'date';
+    kind.value = s.kind;
+    kind.addEventListener('change', async () => {
+      await api(`/api/servers/${s.id}`, { method: 'PATCH', body: JSON.stringify({ kind: kind.value }) });
+    });
     box.append(el('div', { class: 'row' },
-      el('span', {}, s.name, status, expiry,
+      el('span', {}, s.name, status, expiry, kind,
         dateInput(s.expires, async (value) => {
           await api(`/api/servers/${s.id}`, { method: 'PATCH', body: JSON.stringify({ expires: value }) });
           loadAll();
@@ -102,28 +110,8 @@ async function loadServers() {
   return servers;
 }
 
-async function loadEnvironments(servers) {
-  const envs = await api('/api/environments');
-  const box = $('environments');
-  box.textContent = '';
-  for (const env of envs) {
-    const select = el('select', {},
-      el('option', { value: '', textContent: '- nie wybrano -' }),
-      ...servers.map((s) => el('option', { value: String(s.id), textContent: `${s.name} (${s.address})` })));
-    select.value = env.server_id === null ? '' : String(env.server_id);
-    select.addEventListener('change', async () => {
-      await api(`/api/environments/${env.name}`, {
-        method: 'PUT',
-        body: JSON.stringify({ server_id: select.value === '' ? null : Number(select.value) }),
-      });
-    });
-    box.append(el('label', { textContent: env.name === 'testowa' ? 'Testowa' : 'Produkcja' }), select);
-  }
-}
-
 async function loadAll() {
-  const servers = await loadServers();
-  await loadEnvironments(servers);
+  await loadServers();
 }
 
 $('server-form').addEventListener('submit', async (e) => {
@@ -131,7 +119,7 @@ $('server-form').addEventListener('submit', async (e) => {
   try {
     const r = await api('/api/servers', {
       method: 'POST',
-      body: JSON.stringify({ name: $('server-name').value, address: $('server-address').value, token: $('server-token').value, expires: $('server-expires').value }),
+      body: JSON.stringify({ name: $('server-name').value, address: $('server-address').value, token: $('server-token').value, expires: $('server-expires').value, kind: $('server-kind').value }),
     });
     e.target.reset();
     say($('server-msg'), `Dodano. Token należy do: ${r.username}`, true);

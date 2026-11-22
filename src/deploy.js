@@ -92,7 +92,7 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
   function stamp() { return new Date().toISOString().slice(11, 19); }
 
   async function run(id, ctx) {
-    const { repo, tag, environment, server, serverToken, domain, gh } = ctx;
+    const { repo, tag, server, serverToken, domain, gh } = ctx;
     const [owner, name] = repo.split('/');
     const image = `ghcr.io/${owner}/${name}`.toLowerCase();
     const secrets = [serverToken, gh.token].filter(Boolean);
@@ -113,7 +113,7 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
 
     let status = 'failed';
     try {
-      log(`Wdrazanie ${repo}:${tag} -> ${environment} (serwer ${server.name}, ${domain})`);
+      log(`Wdrazanie ${repo}:${tag} -> serwer ${server.name} (${server.kind}), ${domain}`);
 
       const exists = await imageExists(fetchFn, gh, owner, name, tag);
       if (exists === 'no') throw new UserError(`Obraz ${image}:${tag} nie istnieje w ghcr.io`);
@@ -177,18 +177,16 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
   }
 
   // Kontrole przed startem (błędy wracają od razu), potem wdrożenie działa w tle.
-  async function start({ repo, tag, environment }) {
+  async function start({ repo, tag, server_id: serverId }) {
     const parts = String(repo || '').split('/');
     if (parts.length !== 2) throw new UserError('Niepoprawna nazwa repozytorium');
     checkRepoName(parts[0], parts[1]);
     if (!TAG_RE.test(String(tag || ''))) throw new UserError('Niepoprawny tag');
-    if (!['testowa', 'produkcja'].includes(environment)) throw new UserError('Nieznane srodowisko');
 
-    const env = db.prepare('SELECT server_id FROM environments WHERE name = ?').get(environment);
-    if (!env?.server_id) throw new UserError('Dla tego srodowiska nie wybrano serwera (Ustawienia)', 409);
-    const server = db.prepare('SELECT id, name, address, token_enc FROM servers WHERE id = ?').get(env.server_id);
-    const target = db.prepare('SELECT app_domain FROM targets WHERE repo = ? AND environment = ?').get(repo, environment);
-    if (!target) throw new UserError('Najpierw wpisz domene aplikacji dla tego srodowiska', 409);
+    const server = db.prepare('SELECT id, name, address, token_enc, kind FROM servers WHERE id = ?').get(Number(serverId));
+    if (!server) throw new UserError('Nie ma takiego serwera (wybierz serwer)', 404);
+    const target = db.prepare('SELECT app_domain FROM server_targets WHERE repo = ? AND server_id = ?').get(repo, server.id);
+    if (!target) throw new UserError('Najpierw wpisz domene aplikacji dla tego serwera', 409);
     const gh = getGithub();
     if (!gh.token) throw new UserError('Najpierw dodaj token GitHub w ustawieniach', 409);
 
@@ -202,11 +200,11 @@ export function makeDeployer({ db, vault, github, fetchFn, getGithub, runCli = d
 
     const info = db.prepare(
       "INSERT INTO deployments(repo, tag, environment, server_name, app_domain, status) VALUES (?, ?, ?, ?, ?, 'running')"
-    ).run(repo, tag, environment, server.name, target.app_domain);
+    ).run(repo, tag, server.kind, server.name, target.app_domain);
     const id = Number(info.lastInsertRowid);
 
     const done = run(id, {
-      repo, tag, environment, server,
+      repo, tag, server,
       serverToken: vault.decrypt(server.token_enc),
       domain: target.app_domain,
       gh,

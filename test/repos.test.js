@@ -9,7 +9,7 @@ import { checkRepoName } from '../src/github.js';
 
 const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'wdrazacz' };
 const quiet = { info() {}, warn() {} };
-let server, base, dir, cookie, githubCalls, ghcrTags = null;
+let server, base, dir, cookie, githubCalls, ghcrTags = null, db;
 
 const json = (status, body) => ({ status, ok: status < 300, json: async () => body });
 const fakeFetch = async (url) => {
@@ -37,6 +37,7 @@ before(async () => {
     port: 0, dataDir: dir, appSecret: 'test-secret-1234567890',
     adminPassword: 'haslo-testowe-123', sessionMinutes: 5, secureCookie: false,
   }, quiet, { fetchFn: fakeFetch });
+  db = created.db;
   await new Promise((r) => { server = created.app.listen(0, r); });
   base = `http://127.0.0.1:${server.address().port}`;
   const res = await fetch(`${base}/api/login`, { method: 'POST', headers: H, body: JSON.stringify({ username: 'admin', password: 'haslo-testowe-123' }) });
@@ -96,17 +97,20 @@ test('cache: drugie zapytanie o repozytoria nie woła GitHuba ponownie', async (
   assert.equal(githubCalls.length, before);
 });
 
-test('domena aplikacji jest zapamiętywana osobno dla środowisk', async () => {
+test('domena aplikacji jest zapamiętywana osobno dla każdego serwera', async () => {
+  const add = (n) => Number(db.prepare("INSERT INTO servers(name, address, token_enc) VALUES (?, ?, 'x')").run(n, `${n}.example.com`).lastInsertRowid);
+  const s1 = add('s1');
+  const s2 = add('s2');
   const get = async () => (await call('GET', '/api/repos/przyklad/aplikacja-a/targets')).json();
-  assert.deepEqual(await get(), { testowa: null, produkcja: null });
-  let r = await call('PUT', '/api/repos/przyklad/aplikacja-a/targets/testowa', { app_domain: 'https://App-Dev.example.com/' });
+  assert.deepEqual(await get(), {});
+  let r = await call('PUT', `/api/repos/przyklad/aplikacja-a/targets/${s1}`, { app_domain: 'https://App-Dev.example.com/' });
   assert.equal((await r.json()).app_domain, 'app-dev.example.com');
-  await call('PUT', '/api/repos/przyklad/aplikacja-a/targets/produkcja', { app_domain: 'app.example.com' });
-  assert.deepEqual(await get(), { testowa: 'app-dev.example.com', produkcja: 'app.example.com' });
-  await call('PUT', '/api/repos/przyklad/aplikacja-a/targets/testowa', { app_domain: 'app-dev2.example.com' });
-  assert.equal((await get()).testowa, 'app-dev2.example.com');
-  assert.equal((await call('PUT', '/api/repos/przyklad/aplikacja-a/targets/inna', { app_domain: 'x.example.com' })).status, 404);
-  assert.equal((await call('PUT', '/api/repos/przyklad/aplikacja-a/targets/testowa', { app_domain: 'zly adres' })).status, 400);
+  await call('PUT', `/api/repos/przyklad/aplikacja-a/targets/${s2}`, { app_domain: 'app.example.com' });
+  assert.deepEqual(await get(), { [s1]: 'app-dev.example.com', [s2]: 'app.example.com' });
+  await call('PUT', `/api/repos/przyklad/aplikacja-a/targets/${s1}`, { app_domain: 'app-dev2.example.com' });
+  assert.equal((await get())[s1], 'app-dev2.example.com');
+  assert.equal((await call('PUT', '/api/repos/przyklad/aplikacja-a/targets/9999', { app_domain: 'x.example.com' })).status, 404);
+  assert.equal((await call('PUT', `/api/repos/przyklad/aplikacja-a/targets/${s1}`, { app_domain: 'zly adres' })).status, 400);
 });
 
 test('endpointy repozytoriów bez sesji zwracają 401', async () => {

@@ -29,25 +29,26 @@ export function reposRouter({ db, github, fetchFn, getGithub }) {
     res.json({ latest: latestTag(tags), tags, warning });
   }));
 
-  // Zapamiętane domeny aplikacji dla repozytorium: { testowa: "...", produkcja: "..." }
+  // Zapamiętane domeny aplikacji dla repozytorium: { "<id serwera>": "domena" }
   router.get('/repos/:owner/:repo/targets', wrap(async (req, res) => {
     const { owner, repo } = req.params;
     checkRepoName(owner, repo);
-    const rows = db.prepare('SELECT environment, app_domain FROM targets WHERE repo = ?').all(`${owner}/${repo}`);
-    const out = { testowa: null, produkcja: null };
-    for (const r of rows) out[r.environment] = r.app_domain;
+    const rows = db.prepare('SELECT server_id, app_domain FROM server_targets WHERE repo = ?').all(`${owner}/${repo}`);
+    const out = {};
+    for (const r of rows) out[r.server_id] = r.app_domain;
     res.json(out);
   }));
 
-  router.put('/repos/:owner/:repo/targets/:env', wrap(async (req, res) => {
-    const { owner, repo, env } = req.params;
+  router.put('/repos/:owner/:repo/targets/:serverId', wrap(async (req, res) => {
+    const { owner, repo } = req.params;
     checkRepoName(owner, repo);
-    if (!['testowa', 'produkcja'].includes(env)) throw new UserError('Nieznane srodowisko', 404);
+    const serverId = Number(req.params.serverId);
+    if (!db.prepare('SELECT 1 FROM servers WHERE id = ?').get(serverId)) throw new UserError('Nie ma takiego serwera', 404);
     const domain = normalizeAddress(req.body?.app_domain);
     db.prepare(
-      'INSERT INTO targets(repo, environment, app_domain) VALUES (?, ?, ?) ON CONFLICT(repo, environment) DO UPDATE SET app_domain = excluded.app_domain'
-    ).run(`${owner}/${repo}`, env, domain);
-    res.json({ environment: env, app_domain: domain });
+      'INSERT INTO server_targets(repo, server_id, app_domain) VALUES (?, ?, ?) ON CONFLICT(repo, server_id) DO UPDATE SET app_domain = excluded.app_domain'
+    ).run(`${owner}/${repo}`, serverId, domain);
+    res.json({ server_id: serverId, app_domain: domain });
   }));
 
   return router;

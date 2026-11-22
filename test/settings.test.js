@@ -97,24 +97,28 @@ test('sprawdzenie serwera używa zapisanego tokenu', async () => {
   assert.equal(calls.at(-1).auth, 'Bearer cl-ok');
 });
 
-test('środowiska: przypisanie serwera, nieznany serwer i środowisko odrzucone', async () => {
+test('rodzaj serwera: domyślnie testowy, zmiana na produkcyjny, zły rodzaj odrzucony', async () => {
   const id = db.prepare('SELECT id FROM servers').get().id;
-  let r = await call('PUT', '/api/environments/testowa', { server_id: id });
-  assert.equal(r.status, 200);
-  r = await call('PUT', '/api/environments/testowa', { server_id: 9999 });
+  let list = await (await call('GET', '/api/servers')).json();
+  assert.equal(list[0].kind, 'testowa');
+  let r = await call('PATCH', `/api/servers/${id}`, { kind: 'produkcja' });
+  assert.equal((await r.json()).kind, 'produkcja');
+  r = await call('PATCH', `/api/servers/${id}`, { kind: 'inny' });
   assert.equal(r.status, 400);
-  r = await call('PUT', '/api/environments/inna', { server_id: id });
-  assert.equal(r.status, 404);
-  const envs = await (await call('GET', '/api/environments')).json();
-  assert.deepEqual(envs.find((e) => e.name === 'testowa'), { name: 'testowa', server_id: id });
+  r = await call('PATCH', `/api/servers/${id}`, {});
+  assert.equal(r.status, 400);
+  list = await (await call('GET', '/api/servers')).json();
+  assert.equal(list[0].kind, 'produkcja');
+  r = await call('POST', '/api/servers', { name: 'Zly rodzaj', address: 'x.example.com', token: 'cl-ok', kind: 'xyz' });
+  assert.equal(r.status, 400);
 });
 
-test('usunięcie serwera zeruje przypisanie środowiska', async () => {
+test('usunięcie serwera usuwa zapamiętane dla niego domeny', async () => {
   const id = db.prepare('SELECT id FROM servers').get().id;
+  db.prepare("INSERT INTO server_targets(repo, server_id, app_domain) VALUES ('a/b', ?, 'app.example.com')").run(id);
   const r = await call('DELETE', `/api/servers/${id}`);
   assert.equal(r.status, 200);
-  const envs = await (await call('GET', '/api/environments')).json();
-  assert.equal(envs.find((e) => e.name === 'testowa').server_id, null);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM server_targets').get().n, 0);
 });
 
 test('zmiana hasła: za krótkie i błędne obecne hasło odrzucone, poprawna działa', async () => {

@@ -17,6 +17,13 @@ export function settingsRouter({ db, vault, fetchFn, registry, onGithubChange = 
     }
   };
 
+  const KINDS = ['testowa', 'produkcja'];
+  const parseKind = (v) => {
+    if (v === undefined || v === null || v === '') return 'testowa';
+    if (!KINDS.includes(v)) throw new UserError('Rodzaj serwera: testowa lub produkcja');
+    return v;
+  };
+
   const upsertSetting = (key, value) => db.prepare(
     'INSERT INTO settings(key, value_enc) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value_enc = excluded.value_enc'
   ).run(key, vault.encrypt(value));
@@ -100,7 +107,7 @@ export function settingsRouter({ db, vault, fetchFn, registry, onGithubChange = 
 
   // --- Serwery Cloudron
   router.get('/servers', (req, res) => {
-    res.json(db.prepare('SELECT id, name, address, token_expires AS expires FROM servers ORDER BY name').all());
+    res.json(db.prepare('SELECT id, name, address, kind, token_expires AS expires FROM servers ORDER BY name').all());
   });
 
   router.post('/servers', wrap(async (req, res) => {
@@ -110,17 +117,18 @@ export function settingsRouter({ db, vault, fetchFn, registry, onGithubChange = 
     if (!token) throw new UserError('Podaj token API Cloudrona');
     const address = normalizeAddress(req.body?.address);
     const expires = parseExpires(req.body?.expires);
+    const kind = parseKind(req.body?.kind);
     const { username } = await verifyCloudron(fetchFn, address, token);
     try {
-      const info = db.prepare('INSERT INTO servers(name, address, token_enc, token_expires) VALUES (?, ?, ?, ?)')
-        .run(name, address, vault.encrypt(token), expires);
+      const info = db.prepare('INSERT INTO servers(name, address, token_enc, token_expires, kind) VALUES (?, ?, ?, ?, ?)')
+        .run(name, address, vault.encrypt(token), expires, kind);
       const id = Number(info.lastInsertRowid);
       // nowy serwer od razu dostaje dane logowania do ghcr.io (jesli jest token GitHub)
       let sync = null;
       if (registry.hasCredentials()) {
         sync = await registry.syncServer({ id, name, address, token_enc: vault.encrypt(token) });
       }
-      res.status(201).json({ id, name, address, expires, username, registry: sync });
+      res.status(201).json({ id, name, address, kind, expires, username, registry: sync });
     } catch (e) {
       if (String(e.message).includes('UNIQUE')) throw new UserError('Serwer o takiej nazwie juz istnieje');
       throw e;
@@ -135,10 +143,21 @@ export function settingsRouter({ db, vault, fetchFn, registry, onGithubChange = 
   }));
 
   router.patch('/servers/:id', wrap(async (req, res) => {
-    const expires = parseExpires(req.body?.expires);
-    const info = db.prepare('UPDATE servers SET token_expires = ? WHERE id = ?').run(expires, Number(req.params.id));
-    if (!info.changes) throw new UserError('Nie ma takiego serwera', 404);
-    res.json({ expires });
+    const id = Number(req.params.id);
+    if (!db.prepare('SELECT 1 FROM servers WHERE id = ?').get(id)) throw new UserError('Nie ma takiego serwera', 404);
+    const body = req.body || {};
+    if (!('expires' in body) && !('kind' in body)) throw new UserError('Brak zmian');
+    const out = {};
+    if ('expires' in body) {
+      out.expires = parseExpires(body.expires);
+      db.prepare('UPDATE servers SET token_expires = ? WHERE id = ?').run(out.expires, id);
+    }
+    if ('kind' in body) {
+      if (!KINDS.includes(body.kind)) throw new UserError('Rodzaj serwera: testowa lub produkcja');
+      out.kind = body.kind;
+      db.prepare('UPDATE servers SET kind = ? WHERE id = ?').run(out.kind, id);
+    }
+    res.json(out);
   }));
 
   router.delete('/servers/:id', (req, res) => {
@@ -146,23 +165,6 @@ export function settingsRouter({ db, vault, fetchFn, registry, onGithubChange = 
     if (!info.changes) return res.status(404).json({ error: 'Nie ma takiego serwera' });
     res.json({ ok: true });
   });
-
-  // --- Środowiska (testowa / produkcja -> serwer)
-  router.get('/environments', (req, res) => {
-    res.json(db.prepare('SELECT name, server_id FROM environments ORDER BY name DESC').all());
-  });
-
-  router.put('/environments/:name', wrap(async (req, res) => {
-    const name = req.params.name;
-    if (!['testowa', 'produkcja'].includes(name)) throw new UserError('Nieznane srodowisko', 404);
-    const serverId = req.body?.server_id ?? null;
-    if (serverId !== null) {
-      const s = db.prepare('SELECT id FROM servers WHERE id = ?').get(Number(serverId));
-      if (!s) throw new UserError('Nie ma takiego serwera');
-    }
-    db.prepare('UPDATE environments SET server_id = ? WHERE name = ?').run(serverId === null ? null : Number(serverId), name);
-    res.json({ name, server_id: serverId === null ? null : Number(serverId) });
-  }));
 
   return router;
 }

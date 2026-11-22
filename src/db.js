@@ -55,5 +55,22 @@ export function openDb(dataDir) {
   // migracja: data ważności tokenu serwera (YYYY-MM-DD, wpisywana ręcznie)
   const cols = db.prepare('PRAGMA table_info(servers)').all().map((c) => c.name);
   if (!cols.includes('token_expires')) db.exec('ALTER TABLE servers ADD COLUMN token_expires TEXT');
+
+  // wiele serwerow: kazdy serwer ma rodzaj (testowa/produkcja), a domena aplikacji jest per serwer
+  db.exec(`CREATE TABLE IF NOT EXISTS server_targets (
+    repo TEXT NOT NULL,
+    server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    app_domain TEXT NOT NULL,
+    PRIMARY KEY (repo, server_id)
+  )`);
+  if (!cols.includes('kind')) {
+    db.exec("ALTER TABLE servers ADD COLUMN kind TEXT NOT NULL DEFAULT 'testowa'");
+    // przeniesienie dotychczasowego przypisania srodowisk i zapamietanych domen
+    db.exec(`UPDATE servers SET kind = (SELECT e.name FROM environments e WHERE e.server_id = servers.id LIMIT 1)
+             WHERE id IN (SELECT server_id FROM environments WHERE server_id IS NOT NULL)`);
+    db.exec(`INSERT OR IGNORE INTO server_targets(repo, server_id, app_domain)
+             SELECT t.repo, e.server_id, t.app_domain FROM targets t
+             JOIN environments e ON e.name = t.environment WHERE e.server_id IS NOT NULL`);
+  }
   return db;
 }

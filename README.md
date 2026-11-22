@@ -34,6 +34,12 @@ Budowanie lokalnie zamiast pobierania: `docker build -t cloudron-deployer .` i w
 `APP_SECRET` szyfruje tokeny w bazie. Jego zmiana unieważnia zapisane tokeny.
 `ADMIN_PASSWORD` działa tylko przy pierwszym starcie; potem hasło zmienia się w aplikacji.
 
+## Wiele serwerow
+
+Kazdy serwer Cloudron ma w ustawieniach rodzaj (testowy lub produkcyjny). Na stronie repozytorium wybierasz
+konkretny serwer z listy, a domena aplikacji jest zapamietywana osobno dla kazdej pary repozytorium i serwer.
+Przy serwerze produkcyjnym aplikacja pyta o potwierdzenie przed wdrozeniem.
+
 ## Rejestr ghcr.io na serwerach Cloudron
 
 Po zapisaniu tokenu GitHub, po dodaniu serwera i po zmianie nazwy uzytkownika ghcr.io aplikacja dodaje

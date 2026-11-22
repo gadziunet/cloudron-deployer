@@ -79,31 +79,32 @@ const waitDone = async (id) => {
   }
   throw new Error('wdrozenie nie skonczylo sie');
 };
-const body = { repo: 'przyklad/aplikacja-a', tag: 'v0.3.1', environment: 'testowa' };
+const body = { repo: 'przyklad/aplikacja-a', tag: 'v0.3.1', server_id: null };
 
-test('przygotowanie: GitHub, serwer, środowisko, domena', async () => {
+test('przygotowanie: GitHub i serwer', async () => {
   reset();
   assert.equal((await call('PUT', '/api/settings/github', { token: 'gh-ok' })).status, 200);
   const r = await call('POST', '/api/servers', { name: 'Test', address: 'test.example.com', token: 'cl-ok' });
   serverId = (await r.json()).id;
+  body.server_id = serverId;
 });
 
-test('bez przypisanego serwera i bez domeny wdrożenie jest odrzucone z czytelnym błędem', async () => {
-  let r = await deploy(body);
-  assert.equal(r.status, 409);
-  assert.match((await r.json()).error, /nie wybrano serwera/);
-  await call('PUT', '/api/environments/testowa', { server_id: serverId });
+test('nieznany serwer i brak domeny: wdrożenie odrzucone z czytelnym błędem', async () => {
+  let r = await deploy({ ...body, server_id: 9999 });
+  assert.equal(r.status, 404);
+  r = await deploy({ ...body, server_id: undefined });
+  assert.equal(r.status, 404);
   r = await deploy(body);
   assert.equal(r.status, 409);
   assert.match((await r.json()).error, /domene/);
-  await call('PUT', '/api/repos/przyklad/aplikacja-a/targets/testowa', { app_domain: 'app-dev.example.com' });
+  await call('PUT', `/api/repos/przyklad/aplikacja-a/targets/${serverId}`, { app_domain: 'app-dev.example.com' });
 });
 
-test('niepoprawne dane wejściowe: tag, środowisko, repozytorium, nieistniejący tag', async () => {
+test('niepoprawne dane wejściowe: tag, serwer, repozytorium, nieistniejący tag', async () => {
   reset();
   assert.equal((await deploy({ ...body, tag: 'v1; rm -rf /' })).status, 400);
   assert.equal((await deploy({ ...body, tag: '--image=x' })).status, 400);
-  assert.equal((await deploy({ ...body, environment: 'inna' })).status, 400);
+  assert.equal((await deploy({ ...body, server_id: 9999 })).status, 404);
   assert.equal((await deploy({ ...body, repo: 'zly' })).status, 400);
   assert.equal((await deploy({ ...body, tag: 'v9.9.9' })).status, 404);
   assert.equal(cliCalls.length, 0);

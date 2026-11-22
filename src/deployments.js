@@ -7,7 +7,7 @@ export function deploymentsRouter({ db, deployer }) {
   router.post('/deployments', async (req, res) => {
     try {
       const { id } = await deployer.start({
-        repo: req.body?.repo, tag: req.body?.tag, environment: req.body?.environment,
+        repo: req.body?.repo, tag: req.body?.tag, server_id: req.body?.server_id,
       });
       res.status(202).json({ id });
     } catch (e) {

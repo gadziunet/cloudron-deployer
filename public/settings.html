@@ -38,6 +38,11 @@
       <form id="server-form">
         <label for="server-name">Nazwa (np. Test, Produkcja)</label>
         <input id="server-name" required maxlength="60">
+        <label for="server-kind">Rodzaj serwera</label>
+        <select id="server-kind">
+          <option value="testowa">Testowy</option>
+          <option value="produkcja">Produkcyjny</option>
+        </select>
         <label for="server-address">Adres panelu (np. my.example.com)</label>
         <input id="server-address" required>
         <label for="server-token">Token API Cloudrona</label>
@@ -48,11 +53,6 @@
         <button type="submit">Dodaj serwer</button>
         <div id="server-msg" class="error"></div>
       </form>
-    </section>
-
-    <section class="card">
-      <h1>Środowiska</h1>
-      <div id="environments">Ładowanie...</div>
     </section>
 
     <section class="card">
